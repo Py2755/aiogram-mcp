@@ -324,6 +324,19 @@ class TestAiogramMCPInit:
         mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
         assert isinstance(mcp.fastmcp, FastMCP)
 
+    def test_resources_registered(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        resources = asyncio.run(mcp.fastmcp.list_resources())
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://bot/info" in uris
+        assert "telegram://config" in uris
+        assert "telegram://chats" in uris
+
+    def test_middleware_passed_to_context(self, mock_bot, mock_dp):
+        mw = MCPMiddleware()
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, middleware=mw)
+        assert mcp._ctx.middleware is mw
+
 
 # ---------------------------------------------------------------------------
 # Messaging tools
