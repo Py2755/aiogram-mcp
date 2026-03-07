@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -52,10 +53,8 @@ def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
             try:
                 chat = await ctx.bot.get_chat(chat_id)
                 count = None
-                try:
+                with suppress(TelegramBadRequest, TelegramForbiddenError):
                     count = await ctx.bot.get_chat_member_count(chat_id)
-                except (TelegramBadRequest, TelegramForbiddenError):
-                    pass
                 result.append({
                     "id": chat.id,
                     "type": getattr(chat.type, "value", str(chat.type)),
