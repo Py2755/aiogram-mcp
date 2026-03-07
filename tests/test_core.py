@@ -1,0 +1,931 @@
+"""Tests for aiogram-mcp."""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+
+from aiogram_mcp.context import BotContext
+from aiogram_mcp.middleware import MCPMiddleware
+from aiogram_mcp.server import AiogramMCP
+
+
+def get_tool_names(fast_mcp) -> list[str]:
+    tools = asyncio.run(fast_mcp.list_tools())
+    return [tool.name for tool in tools]
+
+
+async def get_tool_map(fast_mcp):
+    tools = await fast_mcp.list_tools()
+    return {tool.name: tool for tool in tools}
+
+
+def _make_fast_mcp():
+    from fastmcp import FastMCP
+
+    return FastMCP("test")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_bot():
+    bot = AsyncMock()
+    bot.get_me = AsyncMock(
+        return_value=MagicMock(
+            id=123456789,
+            username="test_bot",
+            first_name="Test Bot",
+            is_bot=True,
+            can_join_groups=True,
+            can_read_all_group_messages=False,
+            supports_inline_queries=False,
+        )
+    )
+    bot.send_message = AsyncMock(
+        return_value=MagicMock(
+            message_id=42,
+            chat=MagicMock(id=111),
+            date=MagicMock(isoformat=lambda: "2026-03-07T12:00:00"),
+        )
+    )
+    bot.send_photo = AsyncMock(
+        return_value=MagicMock(
+            message_id=43,
+            chat=MagicMock(id=111),
+        )
+    )
+    bot.forward_message = AsyncMock(
+        return_value=MagicMock(message_id=44)
+    )
+    bot.delete_message = AsyncMock(return_value=True)
+    bot.pin_chat_message = AsyncMock(return_value=True)
+    bot.get_chat = AsyncMock(
+        return_value=MagicMock(
+            id=-1001234,
+            type=MagicMock(value="supergroup"),
+            title="Test Group",
+            username="testgroup",
+            description="A test group",
+            is_forum=False,
+        )
+    )
+    bot.get_chat_member_count = AsyncMock(return_value=42)
+    bot.get_chat_member = AsyncMock(
+        return_value=MagicMock(
+            user=MagicMock(
+                id=555,
+                username="testuser",
+                first_name="Test",
+                last_name="User",
+                language_code="en",
+                is_bot=False,
+            ),
+            status=MagicMock(value="member"),
+        )
+    )
+    bot.get_user_profile_photos = AsyncMock(
+        return_value=MagicMock(
+            total_count=1,
+            photos=[
+                [
+                    MagicMock(
+                        file_id="photo_id_1",
+                        file_unique_id="unique_1",
+                        width=320,
+                        height=320,
+                        file_size=12345,
+                    )
+                ]
+            ],
+        )
+    )
+    bot.ban_chat_member = AsyncMock(return_value=True)
+    bot.unban_chat_member = AsyncMock(return_value=True)
+    bot.set_chat_title = AsyncMock(return_value=True)
+    bot.set_chat_description = AsyncMock(return_value=True)
+    bot.session = MagicMock(close=AsyncMock())
+    return bot
+
+
+@pytest.fixture
+def mock_dp():
+    dispatcher = MagicMock()
+    dispatcher.start_polling = AsyncMock()
+    return dispatcher
+
+
+@pytest.fixture
+def ctx(mock_bot, mock_dp):
+    return BotContext(bot=mock_bot, dp=mock_dp)
+
+
+@pytest.fixture
+def ctx_with_allowlist(mock_bot, mock_dp):
+    return BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111, 222])
+
+
+# ---------------------------------------------------------------------------
+# BotContext
+# ---------------------------------------------------------------------------
+
+
+class TestBotContext:
+    def test_all_chats_allowed_by_default(self, ctx):
+        assert ctx.is_chat_allowed(999999) is True
+
+    def test_allowlist_permits_listed_chat(self, ctx_with_allowlist):
+        assert ctx_with_allowlist.is_chat_allowed(111) is True
+
+    def test_allowlist_blocks_unlisted_chat(self, ctx_with_allowlist):
+        assert ctx_with_allowlist.is_chat_allowed(999) is False
+
+    def test_empty_allowlist_blocks_all(self, mock_bot, mock_dp):
+        ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[])
+        assert ctx.is_chat_allowed(111) is False
+
+
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
+
+class TestMiddleware:
+    @pytest.mark.asyncio
+    async def test_tracks_active_chat_and_user(self):
+        middleware = MCPMiddleware()
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222),
+        )
+        handler = AsyncMock(return_value="ok")
+
+        result = await middleware(handler, event, {})
+
+        assert result == "ok"
+        assert middleware.active_chat_ids == {111}
+        assert middleware.active_user_ids == {222}
+
+    @pytest.mark.asyncio
+    async def test_handles_event_without_chat(self):
+        middleware = MCPMiddleware()
+        event = MagicMock(spec=[])  # no chat, no from_user attributes
+        handler = AsyncMock(return_value="ok")
+
+        result = await middleware(handler, event, {})
+
+        assert result == "ok"
+        assert middleware.active_chat_ids == set()
+        assert middleware.active_user_ids == set()
+
+    @pytest.mark.asyncio
+    async def test_tracks_multiple_events(self):
+        middleware = MCPMiddleware()
+        handler = AsyncMock(return_value="ok")
+
+        for chat_id, user_id in [(111, 1), (222, 2), (111, 3)]:
+            event = MagicMock(
+                chat=MagicMock(id=chat_id),
+                from_user=MagicMock(id=user_id),
+            )
+            await middleware(handler, event, {})
+
+        assert middleware.active_chat_ids == {111, 222}
+        assert middleware.active_user_ids == {1, 2, 3}
+
+
+# ---------------------------------------------------------------------------
+# AiogramMCP init
+# ---------------------------------------------------------------------------
+
+
+class TestAiogramMCPInit:
+    def test_creates_without_error(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        assert mcp is not None
+
+    def test_broadcast_disabled_by_default(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        tool_names = get_tool_names(mcp.fastmcp)
+        assert "broadcast" not in tool_names
+
+    def test_broadcast_enabled_when_requested(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, enable_broadcast=True)
+        tool_names = get_tool_names(mcp.fastmcp)
+        assert "broadcast" in tool_names
+
+    def test_core_tools_registered(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        tool_names = get_tool_names(mcp.fastmcp)
+        expected = [
+            "send_message",
+            "send_photo",
+            "forward_message",
+            "delete_message",
+            "pin_message",
+            "get_bot_info",
+            "get_chat_member_info",
+            "get_user_profile_photos",
+            "get_chat_info",
+            "get_chat_members_count",
+            "ban_user",
+            "unban_user",
+            "set_chat_title",
+            "set_chat_description",
+        ]
+        for name in expected:
+            assert name in tool_names, f"Tool '{name}' not registered"
+
+    def test_invalid_transport_raises(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+
+        with pytest.raises(ValueError):
+            asyncio.run(mcp.run_alongside_bot(transport="invalid"))
+
+    def test_custom_name(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, name="my-bot")
+        assert mcp.name == "my-bot"
+
+    def test_fastmcp_property(self, mock_bot, mock_dp):
+        from fastmcp import FastMCP
+
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        assert isinstance(mcp.fastmcp, FastMCP)
+
+
+# ---------------------------------------------------------------------------
+# Messaging tools
+# ---------------------------------------------------------------------------
+
+
+class TestSendMessage:
+    @pytest.mark.asyncio
+    async def test_send_message_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_message"].fn(chat_id=111, text="Hello test")
+        assert result["ok"] is True
+        assert result["message_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_send_message_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_message"].fn(chat_id=999, text="Should be blocked")
+        assert result["ok"] is False
+        assert "not in the allowed_chat_ids" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_send_message_rejects_invalid_parse_mode(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_message"].fn(
+            chat_id=111,
+            text="Hello test",
+            parse_mode="invalid",
+        )
+        assert result["ok"] is False
+        assert "parse_mode must be one of" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_send_message_telegram_forbidden(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        mock_bot.send_message = AsyncMock(
+            side_effect=TelegramForbiddenError(method=MagicMock(), message="Forbidden")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_message"].fn(chat_id=111, text="Hello")
+        assert result["ok"] is False
+        assert "blocked" in result["error"].lower() or "permission" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_send_message_telegram_bad_request(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        mock_bot.send_message = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="Bad Request: chat not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_message"].fn(chat_id=111, text="Hello")
+        assert result["ok"] is False
+
+
+class TestSendPhoto:
+    @pytest.mark.asyncio
+    async def test_send_photo_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_photo"].fn(
+            chat_id=111, photo_url="https://example.com/photo.jpg"
+        )
+        assert result["ok"] is True
+        assert result["message_id"] == 43
+
+    @pytest.mark.asyncio
+    async def test_send_photo_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_photo"].fn(
+            chat_id=999, photo_url="https://example.com/photo.jpg"
+        )
+        assert result["ok"] is False
+
+
+class TestForwardMessage:
+    @pytest.mark.asyncio
+    async def test_forward_message_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["forward_message"].fn(
+            to_chat_id=111, from_chat_id=222, message_id=1
+        )
+        assert result["ok"] is True
+        assert result["message_id"] == 44
+
+    @pytest.mark.asyncio
+    async def test_forward_message_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["forward_message"].fn(
+            to_chat_id=999, from_chat_id=111, message_id=1
+        )
+        assert result["ok"] is False
+
+
+class TestDeleteMessage:
+    @pytest.mark.asyncio
+    async def test_delete_message_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["delete_message"].fn(chat_id=111, message_id=42)
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_message_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["delete_message"].fn(chat_id=999, message_id=42)
+        assert result["ok"] is False
+
+
+class TestPinMessage:
+    @pytest.mark.asyncio
+    async def test_pin_message_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["pin_message"].fn(chat_id=111, message_id=42)
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_pin_message_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.messaging import register_messaging_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_messaging_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["pin_message"].fn(chat_id=999, message_id=42)
+        assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# User tools
+# ---------------------------------------------------------------------------
+
+
+class TestGetBotInfo:
+    @pytest.mark.asyncio
+    async def test_get_bot_info_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_bot_info"].fn()
+        assert result["ok"] is True
+        assert result["id"] == 123456789
+        assert result["username"] == "test_bot"
+        assert result["is_bot"] is True
+
+
+class TestGetChatMemberInfo:
+    @pytest.mark.asyncio
+    async def test_get_chat_member_info_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_member_info"].fn(chat_id=111, user_id=555)
+        assert result["ok"] is True
+        assert result["user_id"] == 555
+        assert result["status"] == "member"
+        assert result["username"] == "testuser"
+
+    @pytest.mark.asyncio
+    async def test_get_chat_member_info_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_member_info"].fn(chat_id=999, user_id=555)
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_chat_member_info_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        mock_bot.get_chat_member = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="user not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_member_info"].fn(chat_id=111, user_id=999)
+        assert result["ok"] is False
+
+
+class TestGetUserProfilePhotos:
+    @pytest.mark.asyncio
+    async def test_get_user_profile_photos_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_user_profile_photos"].fn(user_id=555)
+        assert result["ok"] is True
+        assert result["total_count"] == 1
+        assert len(result["photos"]) == 1
+        assert result["photos"][0][0]["file_id"] == "photo_id_1"
+
+    @pytest.mark.asyncio
+    async def test_get_user_profile_photos_invalid_limit(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_user_profile_photos"].fn(user_id=555, limit=0)
+        assert result["ok"] is False
+        assert "limit" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_user_profile_photos_limit_too_high(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.users import register_user_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_user_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_user_profile_photos"].fn(user_id=555, limit=101)
+        assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Chat tools
+# ---------------------------------------------------------------------------
+
+
+class TestGetChatInfo:
+    @pytest.mark.asyncio
+    async def test_get_chat_info_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_info"].fn(chat_id=-1001234)
+        assert result["ok"] is True
+        assert result["type"] == "supergroup"
+        assert result["title"] == "Test Group"
+        assert result["member_count"] == 42
+
+    @pytest.mark.asyncio
+    async def test_get_chat_info_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        mock_bot.get_chat = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="chat not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_info"].fn(chat_id=999)
+        assert result["ok"] is False
+
+
+class TestGetChatMembersCount:
+    @pytest.mark.asyncio
+    async def test_get_chat_members_count_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_members_count"].fn(chat_id=-1001234)
+        assert result["ok"] is True
+        assert result["count"] == 42
+
+    @pytest.mark.asyncio
+    async def test_get_chat_members_count_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        mock_bot.get_chat_member_count = AsyncMock(
+            side_effect=TelegramForbiddenError(
+                method=MagicMock(), message="Forbidden"
+            )
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["get_chat_members_count"].fn(chat_id=-1001234)
+        assert result["ok"] is False
+
+
+class TestBanUser:
+    @pytest.mark.asyncio
+    async def test_ban_user_permanent(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["ban_user"].fn(chat_id=111, user_id=555)
+        assert result["ok"] is True
+        assert result["permanent"] is True
+        assert result["until"] is None
+
+    @pytest.mark.asyncio
+    async def test_ban_user_temporary(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["ban_user"].fn(
+            chat_id=111, user_id=555, ban_duration_hours=24
+        )
+        assert result["ok"] is True
+        assert result["permanent"] is False
+        assert result["until"] is not None
+
+    @pytest.mark.asyncio
+    async def test_ban_user_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["ban_user"].fn(chat_id=999, user_id=555)
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_ban_user_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        mock_bot.ban_chat_member = AsyncMock(
+            side_effect=TelegramBadRequest(
+                method=MagicMock(), message="not enough rights"
+            )
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["ban_user"].fn(chat_id=111, user_id=555)
+        assert result["ok"] is False
+
+
+class TestUnbanUser:
+    @pytest.mark.asyncio
+    async def test_unban_user_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["unban_user"].fn(chat_id=111, user_id=555)
+        assert result["ok"] is True
+        assert result["user_id"] == 555
+
+    @pytest.mark.asyncio
+    async def test_unban_user_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["unban_user"].fn(chat_id=999, user_id=555)
+        assert result["ok"] is False
+
+
+class TestSetChatTitle:
+    @pytest.mark.asyncio
+    async def test_set_chat_title_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["set_chat_title"].fn(chat_id=111, title="New Title")
+        assert result["ok"] is True
+        assert result["new_title"] == "New Title"
+
+    @pytest.mark.asyncio
+    async def test_set_chat_title_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["set_chat_title"].fn(chat_id=999, title="Hack")
+        assert result["ok"] is False
+
+
+class TestSetChatDescription:
+    @pytest.mark.asyncio
+    async def test_set_chat_description_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["set_chat_description"].fn(
+            chat_id=111, description="New desc"
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_set_chat_description_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.chats import register_chat_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_chat_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["set_chat_description"].fn(
+            chat_id=999, description="Hack"
+        )
+        assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Broadcast tools
+# ---------------------------------------------------------------------------
+
+
+class TestBroadcast:
+    @pytest.mark.asyncio
+    async def test_broadcast_dry_run_preview(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111, 222])
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=10)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(chat_ids=[111, 222], text="Planned maintenance")
+
+        assert result["ok"] is True
+        assert result["dry_run"] is True
+        assert result["would_send_to"] == 2
+
+    @pytest.mark.asyncio
+    async def test_broadcast_exceeds_recipient_limit(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=2)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(
+            chat_ids=[1, 2, 3], text="Too many"
+        )
+        assert result["ok"] is False
+        assert "exceeds safety limit" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_broadcast_blocked_chats(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=10)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(
+            chat_ids=[111, 999], text="Hello"
+        )
+        assert result["ok"] is False
+        assert "not in allowed_chat_ids" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_broadcast_actual_send(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=10)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(
+            chat_ids=[111, 222],
+            text="Hello everyone",
+            dry_run=False,
+            delay_seconds=0,
+        )
+        assert result["ok"] is True
+        assert result["dry_run"] is False
+        assert result["success_count"] == 2
+        assert result["failed_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_broadcast_partial_failure(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        call_count = 0
+
+        async def send_message_side_effect(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise TelegramForbiddenError(method=MagicMock(), message="Forbidden")
+            return MagicMock(message_id=call_count)
+
+        mock_bot.send_message = AsyncMock(side_effect=send_message_side_effect)
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=10)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(
+            chat_ids=[111, 222, 333],
+            text="Hello",
+            dry_run=False,
+            delay_seconds=0,
+        )
+        assert result["ok"] is True
+        assert result["success_count"] == 2
+        assert result["failed_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_broadcast_invalid_parse_mode(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.broadcast import register_broadcast_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_broadcast_tools(fast_mcp, tool_ctx, max_recipients=10)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["broadcast"].fn(
+            chat_ids=[111],
+            text="Hello",
+            parse_mode="invalid",
+            dry_run=False,
+        )
+        assert result["ok"] is False
+        assert "parse_mode" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Normalize parse mode
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeParseMode:
+    def test_none_returns_none(self):
+        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+
+        assert _normalize_parse_mode(None) is None
+
+    def test_html(self):
+        from aiogram.enums import ParseMode
+
+        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+
+        assert _normalize_parse_mode("HTML") == ParseMode.HTML
+        assert _normalize_parse_mode("html") == ParseMode.HTML
+        assert _normalize_parse_mode("  Html  ") == ParseMode.HTML
+
+    def test_markdown(self):
+        from aiogram.enums import ParseMode
+
+        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+
+        assert _normalize_parse_mode("Markdown") == ParseMode.MARKDOWN_V2
+        assert _normalize_parse_mode("MarkdownV2") == ParseMode.MARKDOWN_V2
+
+    def test_invalid_raises(self):
+        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+
+        with pytest.raises(ValueError):
+            _normalize_parse_mode("xml")
