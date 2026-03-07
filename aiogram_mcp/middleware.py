@@ -40,12 +40,13 @@ class MCPMiddleware(BaseMiddleware):
         if chat_id is not None and text is not None:
             if chat_id not in self.message_history:
                 self.message_history[chat_id] = deque(maxlen=self.history_size)
+            event_date = getattr(event, "date", None)
             self.message_history[chat_id].append({
                 "message_id": getattr(event, "message_id", None),
                 "from_user_id": user.id if user else None,
                 "from_username": getattr(user, "username", None) if user else None,
                 "text": text,
-                "date": getattr(event, "date").isoformat() if getattr(event, "date", None) else None,
+                "date": event_date.isoformat() if event_date else None,
             })
 
         return await handler(event, data)
