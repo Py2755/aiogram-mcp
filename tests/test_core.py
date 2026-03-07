@@ -200,6 +200,64 @@ class TestMiddleware:
         assert middleware.active_user_ids == {1, 2, 3}
 
 
+class TestMiddlewareHistory:
+    @pytest.mark.asyncio
+    async def test_caches_text_message(self):
+        middleware = MCPMiddleware(history_size=50)
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text="Hello world",
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-07T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        assert len(middleware.message_history[111]) == 1
+        msg = middleware.message_history[111][0]
+        assert msg["text"] == "Hello world"
+        assert msg["from_user_id"] == 222
+
+    @pytest.mark.asyncio
+    async def test_skips_non_text_message(self):
+        middleware = MCPMiddleware(history_size=50)
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-07T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        assert len(middleware.message_history.get(111, [])) == 0
+
+    @pytest.mark.asyncio
+    async def test_respects_history_size_limit(self):
+        middleware = MCPMiddleware(history_size=3)
+        handler = AsyncMock(return_value="ok")
+
+        for i in range(5):
+            event = MagicMock(
+                chat=MagicMock(id=111),
+                from_user=MagicMock(id=222, username="alice"),
+                text=f"Message {i}",
+                message_id=i,
+                date=MagicMock(isoformat=lambda: "2026-03-07T12:00:00"),
+            )
+            await middleware(handler, event, {})
+
+        assert len(middleware.message_history[111]) == 3
+        assert middleware.message_history[111][0]["text"] == "Message 2"
+
+    @pytest.mark.asyncio
+    async def test_default_history_size(self):
+        middleware = MCPMiddleware()
+        assert middleware.history_size == 50
+
+
 # ---------------------------------------------------------------------------
 # AiogramMCP init
 # ---------------------------------------------------------------------------
