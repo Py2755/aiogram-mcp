@@ -10,6 +10,8 @@ from aiogram import Bot, Dispatcher
 from fastmcp import FastMCP
 
 from .context import BotContext
+from .middleware import MCPMiddleware
+from .resources import register_resources
 from .tools.broadcast import register_broadcast_tools
 from .tools.chats import register_chat_tools
 from .tools.messaging import register_messaging_tools
@@ -29,6 +31,7 @@ class AiogramMCP:
         allowed_chat_ids: list[int] | None = None,
         enable_broadcast: bool = False,
         max_broadcast_recipients: int = 100,
+        middleware: MCPMiddleware | None = None,
     ) -> None:
         self.bot = bot
         self.dp = dp
@@ -41,6 +44,7 @@ class AiogramMCP:
             bot=bot,
             dp=dp,
             allowed_chat_ids=allowed_chat_ids,
+            middleware=middleware,
         )
         self._mcp = FastMCP(
             name=name,
@@ -58,6 +62,7 @@ class AiogramMCP:
         register_messaging_tools(self._mcp, self._ctx)
         register_user_tools(self._mcp, self._ctx)
         register_chat_tools(self._mcp, self._ctx)
+        register_resources(self._mcp, self._ctx)
 
         if self.enable_broadcast:
             register_broadcast_tools(
