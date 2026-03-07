@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aiogram-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server middleware for aiogram Telegram bots — expose your bot to AI agents via the Model Context Protocol"
 readme = "README.md"
 license = { text = "MIT" }
