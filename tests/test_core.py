@@ -967,6 +967,206 @@ class TestBroadcast:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# MCP Resources
+# ---------------------------------------------------------------------------
+
+
+class TestResourceBotInfo:
+    @pytest.mark.asyncio
+    async def test_bot_info_resource_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        resources = await fast_mcp.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://bot/info" in uris
+
+    @pytest.mark.asyncio
+    async def test_bot_info_resource_content(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://bot/info")
+        data = json.loads(result.contents[0].content)
+        assert data["id"] == 123456789
+        assert data["username"] == "test_bot"
+        assert data["is_bot"] is True
+
+
+class TestResourceConfig:
+    @pytest.mark.asyncio
+    async def test_config_resource_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111, 222])
+        register_resources(fast_mcp, tool_ctx)
+
+        resources = await fast_mcp.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://config" in uris
+
+    @pytest.mark.asyncio
+    async def test_config_resource_content(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://config")
+        data = json.loads(result.contents[0].content)
+        assert data["allowed_chat_ids"] == [111]
+
+
+class TestResourceChats:
+    @pytest.mark.asyncio
+    async def test_chats_resource_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        resources = await fast_mcp.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://chats" in uris
+
+    @pytest.mark.asyncio
+    async def test_chats_without_middleware(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats")
+        data = json.loads(result.contents[0].content)
+        assert data["chats"] == []
+        assert "note" in data
+
+    @pytest.mark.asyncio
+    async def test_chats_with_middleware(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        mw = MCPMiddleware()
+        mw.active_chat_ids = {-1001234}
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, middleware=mw)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats")
+        data = json.loads(result.contents[0].content)
+        assert len(data["chats"]) == 1
+        assert data["chats"][0]["title"] == "Test Group"
+
+    @pytest.mark.asyncio
+    async def test_chats_filtered_by_allowlist(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        mw = MCPMiddleware()
+        mw.active_chat_ids = {111, 999}
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(
+            bot=mock_bot, dp=mock_dp, middleware=mw, allowed_chat_ids=[111]
+        )
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats")
+        data = json.loads(result.contents[0].content)
+        chat_ids = [c["id"] for c in data["chats"]]
+        assert 999 not in chat_ids
+
+
+class TestResourceChatHistory:
+    @pytest.mark.asyncio
+    async def test_history_resource_template(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        templates = await fast_mcp.list_resource_templates()
+        uris = [str(t.uri_template) for t in templates]
+        assert any("chat_id" in u for u in uris)
+
+    @pytest.mark.asyncio
+    async def test_history_with_messages(self, mock_bot, mock_dp):
+        import json
+        from collections import deque
+
+        from aiogram_mcp.resources import register_resources
+
+        mw = MCPMiddleware()
+        mw.message_history[111] = deque([
+            {"message_id": 1, "from_user_id": 222, "from_username": "alice",
+             "text": "Hello", "date": "2026-03-07T12:00:00"},
+        ])
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, middleware=mw)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats/111/history")
+        data = json.loads(result.contents[0].content)
+        assert data["chat_id"] == 111
+        assert len(data["messages"]) == 1
+        assert data["messages"][0]["text"] == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_history_blocked_by_allowlist(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(
+            bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111]
+        )
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats/999/history")
+        data = json.loads(result.contents[0].content)
+        assert data["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_history_without_middleware(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://chats/111/history")
+        data = json.loads(result.contents[0].content)
+        assert data["messages"] == []
+        assert "note" in data
+
+
+# ---------------------------------------------------------------------------
+# Normalize parse mode
+# ---------------------------------------------------------------------------
+
+
 class TestNormalizeParseMode:
     def test_none_returns_none(self):
         from aiogram_mcp.tools.messaging import _normalize_parse_mode
