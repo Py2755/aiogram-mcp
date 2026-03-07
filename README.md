@@ -73,6 +73,19 @@ Broadcast:
 
 - `broadcast` when `enable_broadcast=True`
 
+## MCP Resources
+
+Read-only data exposed to AI agents without tool calls:
+
+| URI | Description |
+|---|---|
+| `telegram://bot/info` | Bot metadata (username, capabilities) |
+| `telegram://config` | Server configuration and allowed chat IDs |
+| `telegram://chats` | Active chats the bot has seen (requires middleware) |
+| `telegram://chats/{chat_id}/history` | Recent message history for a chat |
+
+Resources require `MCPMiddleware` to be attached for chat tracking and message history.
+
 ## Safety Controls
 
 ```python
@@ -86,15 +99,15 @@ mcp = AiogramMCP(
 )
 ```
 
-Use `MCPMiddleware` to track recent chats and build recipient lists:
+Use `MCPMiddleware` to track chats, users, and message history for MCP resources:
 
 ```python
 from aiogram_mcp import AiogramMCP, MCPMiddleware
 
-tracker = MCPMiddleware()
+tracker = MCPMiddleware(history_size=50)
 dp.message.middleware(tracker)
 
-mcp = AiogramMCP(bot=bot, dp=dp, enable_broadcast=True)
+mcp = AiogramMCP(bot=bot, dp=dp, middleware=tracker, enable_broadcast=True)
 ```
 
 ## Development

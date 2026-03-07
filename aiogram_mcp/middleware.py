@@ -45,7 +45,7 @@ class MCPMiddleware(BaseMiddleware):
                 "from_user_id": user.id if user else None,
                 "from_username": getattr(user, "username", None) if user else None,
                 "text": text,
-                "date": event.date.isoformat() if getattr(event, "date", None) else None,
+                "date": getattr(event, "date").isoformat() if getattr(event, "date", None) else None,
             })
 
         return await handler(event, data)
