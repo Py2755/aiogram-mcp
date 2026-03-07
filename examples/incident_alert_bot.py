@@ -65,6 +65,7 @@ mcp = AiogramMCP(
     bot=bot,
     dp=dp,
     name="service-status-bot",
+    middleware=tracker,
     enable_broadcast=True,
     max_broadcast_recipients=1000,
 )

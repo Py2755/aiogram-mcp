@@ -39,6 +39,7 @@ mcp = AiogramMCP(
     bot=bot,
     dp=dp,
     name="my-telegram-bot",
+    middleware=mcp_middleware,
 )
 
 
