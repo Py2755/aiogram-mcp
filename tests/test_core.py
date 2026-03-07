@@ -150,6 +150,14 @@ class TestBotContext:
         ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[])
         assert ctx.is_chat_allowed(111) is False
 
+    def test_middleware_default_none(self, ctx):
+        assert ctx.middleware is None
+
+    def test_middleware_assigned(self, mock_bot, mock_dp):
+        mw = MCPMiddleware()
+        ctx = BotContext(bot=mock_bot, dp=mock_dp, middleware=mw)
+        assert ctx.middleware is mw
+
 
 # ---------------------------------------------------------------------------
 # Middleware

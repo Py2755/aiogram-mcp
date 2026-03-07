@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from aiogram import Bot, Dispatcher
+
+if TYPE_CHECKING:
+    from .middleware import MCPMiddleware
 
 
 @dataclass(slots=True)
@@ -14,6 +18,7 @@ class BotContext:
     bot: Bot
     dp: Dispatcher
     allowed_chat_ids: list[int] | None = None
+    middleware: MCPMiddleware | None = None
 
     def is_chat_allowed(self, chat_id: int) -> bool:
         """Return whether the MCP server may act on a chat."""
