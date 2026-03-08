@@ -8,5 +8,3 @@ __pycache__/
 .venv/
 build/
 dist/
-plan.md
-docs/plans/
