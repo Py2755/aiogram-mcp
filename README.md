@@ -86,6 +86,18 @@ Read-only data exposed to AI agents without tool calls:
 
 Resources require `MCPMiddleware` to be attached for chat tracking and message history.
 
+## MCP Prompts
+
+Ready-made workflows that give AI agents structured context instead of raw tools:
+
+| Prompt | Arguments | Description |
+|---|---|---|
+| `moderation_prompt` | `chat_id`, `user_id`, `reason` | Review user behavior with message history and suggest moderation action |
+| `announcement_prompt` | `topic`, `audience?`, `tone?` | Draft a Telegram announcement with formatting guidelines |
+| `user_report_prompt` | `chat_id`, `user_id` | Compile a comprehensive user activity report |
+
+Prompts that access chat data require `MCPMiddleware` for message history and `allowed_chat_ids` for access control.
+
 ## Safety Controls
 
 ```python

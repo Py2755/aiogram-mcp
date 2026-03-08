@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 (2026-03-08)
+
+### Added
+- 3 MCP Prompts: `moderation_prompt`, `announcement_prompt`, `user_report_prompt`
+- Prompts give AI agents ready-made workflows instead of raw tools
+- `moderation_prompt` — review user behavior with message history and suggest action
+- `announcement_prompt` — draft Telegram announcements with formatting guidelines
+- `user_report_prompt` — compile comprehensive user activity reports
+
 ## 0.2.0 (2026-03-07)
 
 ### Added

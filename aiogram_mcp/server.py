@@ -11,6 +11,7 @@ from fastmcp import FastMCP
 
 from .context import BotContext
 from .middleware import MCPMiddleware
+from .prompts import register_prompts
 from .resources import register_resources
 from .tools.broadcast import register_broadcast_tools
 from .tools.chats import register_chat_tools
@@ -63,6 +64,7 @@ class AiogramMCP:
         register_user_tools(self._mcp, self._ctx)
         register_chat_tools(self._mcp, self._ctx)
         register_resources(self._mcp, self._ctx)
+        register_prompts(self._mcp, self._ctx)
 
         if self.enable_broadcast:
             register_broadcast_tools(

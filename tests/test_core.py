@@ -86,6 +86,7 @@ def mock_bot():
                 last_name="User",
                 language_code="en",
                 is_bot=False,
+                is_premium=None,
             ),
             status=MagicMock(value="member"),
         )
@@ -1208,3 +1209,283 @@ class TestNormalizeParseMode:
 
         with pytest.raises(ValueError):
             _normalize_parse_mode("xml")
+
+
+# ---------------------------------------------------------------------------
+# MCP Prompts
+# ---------------------------------------------------------------------------
+
+
+class TestModerationPrompt:
+    @pytest.mark.asyncio
+    async def test_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        prompts = await fast_mcp.list_prompts()
+        names = [p.name for p in prompts]
+        assert "moderation_prompt" in names
+
+    @pytest.mark.asyncio
+    async def test_content_with_valid_data(self, mock_bot, mock_dp):
+        from collections import deque
+
+        from aiogram_mcp.prompts import register_prompts
+
+        mw = MCPMiddleware()
+        mw.message_history[111] = deque([
+            {"message_id": 1, "from_user_id": 555, "from_username": "testuser",
+             "text": "bad message", "date": "2026-03-07T12:00:00"},
+            {"message_id": 2, "from_user_id": 999, "from_username": "other",
+             "text": "innocent", "date": "2026-03-07T12:01:00"},
+        ])
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, middleware=mw)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "moderation_prompt",
+            {"chat_id": "111", "user_id": "555", "reason": "spam"},
+        )
+        text = result.messages[0].content.text
+        assert "moderator" in text
+        assert "spam" in text
+        assert "bad message" in text
+        # Should NOT include messages from other users
+        assert "innocent" not in text
+
+    @pytest.mark.asyncio
+    async def test_chat_not_allowed(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(
+            bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111]
+        )
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "moderation_prompt",
+            {"chat_id": "999", "user_id": "555", "reason": "spam"},
+        )
+        data = json.loads(result.messages[0].content.text)
+        assert "error" in data
+
+    @pytest.mark.asyncio
+    async def test_without_middleware(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "moderation_prompt",
+            {"chat_id": "111", "user_id": "555", "reason": "spam"},
+        )
+        text = result.messages[0].content.text
+        assert "moderator" in text
+        assert "[]" in text  # empty recent messages
+
+    @pytest.mark.asyncio
+    async def test_includes_available_actions(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "moderation_prompt",
+            {"chat_id": "111", "user_id": "555", "reason": "test"},
+        )
+        text = result.messages[0].content.text
+        assert "ban_user" in text
+        assert "send_message" in text
+
+
+class TestAnnouncementPrompt:
+    @pytest.mark.asyncio
+    async def test_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        prompts = await fast_mcp.list_prompts()
+        names = [p.name for p in prompts]
+        assert "announcement_prompt" in names
+
+    @pytest.mark.asyncio
+    async def test_content_with_defaults(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "announcement_prompt",
+            {"topic": "Server maintenance"},
+        )
+        text = result.messages[0].content.text
+        assert "Server maintenance" in text
+        assert "all members" in text  # default audience
+        assert "friendly" in text  # default tone
+        assert "HTML" in text
+
+    @pytest.mark.asyncio
+    async def test_content_with_custom_params(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "announcement_prompt",
+            {"topic": "New feature", "audience": "admins", "tone": "formal"},
+        )
+        text = result.messages[0].content.text
+        assert "New feature" in text
+        assert "admins" in text
+        assert "formal" in text
+
+    @pytest.mark.asyncio
+    async def test_includes_formatting_guidelines(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "announcement_prompt",
+            {"topic": "test"},
+        )
+        text = result.messages[0].content.text
+        assert "parse_mode" in text
+        assert "disable_notification" in text
+        assert "send_message" in text
+
+
+class TestUserReportPrompt:
+    @pytest.mark.asyncio
+    async def test_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        prompts = await fast_mcp.list_prompts()
+        names = [p.name for p in prompts]
+        assert "user_report_prompt" in names
+
+    @pytest.mark.asyncio
+    async def test_content_with_valid_data(self, mock_bot, mock_dp):
+        from collections import deque
+
+        from aiogram_mcp.prompts import register_prompts
+
+        mw = MCPMiddleware()
+        mw.message_history[111] = deque([
+            {"message_id": 1, "from_user_id": 555, "from_username": "testuser",
+             "text": "Hello", "date": "2026-03-07T12:00:00"},
+            {"message_id": 2, "from_user_id": 555, "from_username": "testuser",
+             "text": "World", "date": "2026-03-07T12:01:00"},
+        ])
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, middleware=mw)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "user_report_prompt",
+            {"chat_id": "111", "user_id": "555"},
+        )
+        text = result.messages[0].content.text
+        assert "analyst" in text
+        assert "message_count" in text
+        assert '"message_count": 2' in text
+        assert "Hello" in text
+        assert "World" in text
+
+    @pytest.mark.asyncio
+    async def test_chat_not_allowed(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(
+            bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111]
+        )
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "user_report_prompt",
+            {"chat_id": "999", "user_id": "555"},
+        )
+        data = json.loads(result.messages[0].content.text)
+        assert "error" in data
+
+    @pytest.mark.asyncio
+    async def test_without_middleware(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "user_report_prompt",
+            {"chat_id": "111", "user_id": "555"},
+        )
+        text = result.messages[0].content.text
+        assert "analyst" in text
+        assert '"message_count": 0' in text
+
+    @pytest.mark.asyncio
+    async def test_includes_profile_photos(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.render_prompt(
+            "user_report_prompt",
+            {"chat_id": "111", "user_id": "555"},
+        )
+        text = result.messages[0].content.text
+        assert "Total: 1" in text  # mock returns total_count=1
+
+
+class TestAllPromptsRegistered:
+    @pytest.mark.asyncio
+    async def test_three_prompts_in_list(self, mock_bot, mock_dp):
+        from aiogram_mcp.prompts import register_prompts
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_prompts(fast_mcp, tool_ctx)
+
+        prompts = await fast_mcp.list_prompts()
+        names = {p.name for p in prompts}
+        assert names == {"moderation_prompt", "announcement_prompt", "user_report_prompt"}
+
+    @pytest.mark.asyncio
+    async def test_prompts_via_server(self, mock_bot, mock_dp):
+        """Prompts are registered when AiogramMCP is instantiated."""
+        server = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        prompts = await server.fastmcp.list_prompts()
+        names = {p.name for p in prompts}
+        assert "moderation_prompt" in names
+        assert "announcement_prompt" in names
+        assert "user_report_prompt" in names
