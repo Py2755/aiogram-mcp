@@ -1614,3 +1614,72 @@ class TestEventManagerSubscriptions:
         sub_id = em.subscribe(session=session)
         await em.push_event({"type": "message", "chat_id": 111, "text": "hi"})
         assert em.unsubscribe(sub_id) is False  # already removed
+
+
+class TestMiddlewareEventPush:
+    @pytest.mark.asyncio
+    async def test_pushes_message_event(self):
+        em = EventManager()
+        middleware = MCPMiddleware(event_manager=em)
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text="Hello world",
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-11T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        events = em.get_events()
+        assert len(events) == 1
+        assert events[0]["type"] == "message"
+        assert events[0]["chat_id"] == 111
+        assert events[0]["from_user_id"] == 222
+
+    @pytest.mark.asyncio
+    async def test_pushes_command_event(self):
+        em = EventManager()
+        middleware = MCPMiddleware(event_manager=em)
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text="/start",
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-11T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        events = em.get_events()
+        assert events[0]["type"] == "command"
+
+    @pytest.mark.asyncio
+    async def test_no_event_push_without_event_manager(self):
+        middleware = MCPMiddleware()
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text="Hello",
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-11T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        result = await middleware(handler, event, {})
+        assert result == "ok"  # no error even without event_manager
+
+    @pytest.mark.asyncio
+    async def test_non_text_event_not_pushed(self):
+        em = EventManager()
+        middleware = MCPMiddleware(event_manager=em)
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-11T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        assert em.get_events() == []
