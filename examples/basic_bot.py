@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from aiogram_mcp import AiogramMCP, MCPMiddleware
+from aiogram_mcp import AiogramMCP, EventManager, MCPMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,7 +19,8 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-mcp_middleware = MCPMiddleware()
+event_manager = EventManager()
+mcp_middleware = MCPMiddleware(event_manager=event_manager)
 dp.message.middleware(mcp_middleware)
 
 
@@ -40,6 +41,7 @@ mcp = AiogramMCP(
     dp=dp,
     name="my-telegram-bot",
     middleware=mcp_middleware,
+    event_manager=event_manager,
 )
 
 
