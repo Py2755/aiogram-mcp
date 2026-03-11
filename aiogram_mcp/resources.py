@@ -86,3 +86,21 @@ def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
 
         messages = list(ctx.middleware.message_history.get(cid, []))
         return json.dumps({"chat_id": cid, "messages": messages})
+
+    @mcp.resource("telegram://events/queue")
+    async def events_queue() -> str:
+        """Real-time event queue from Telegram.
+
+        Returns recent events (messages, commands) received by the bot.
+        Use subscribe_events tool to get push notifications when new events arrive.
+        Each event has an 'id' field — use it to track which events you've seen.
+        """
+        if ctx.event_manager is None:
+            return json.dumps({
+                "events": [],
+                "count": 0,
+                "note": "EventManager is not configured. No event streaming available.",
+            })
+
+        events = ctx.event_manager.get_events()
+        return json.dumps({"events": events, "count": len(events)})

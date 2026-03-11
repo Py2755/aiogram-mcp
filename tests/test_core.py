@@ -1792,3 +1792,74 @@ class TestUnsubscribeEvents:
         tools = await get_tool_map(fast_mcp)
         result = await tools["unsubscribe_events"].fn(subscription_id="abc")
         assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Event queue resource
+# ---------------------------------------------------------------------------
+
+
+class TestResourceEventQueue:
+    @pytest.mark.asyncio
+    async def test_event_queue_registered(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_resources(fast_mcp, tool_ctx)
+
+        resources = await fast_mcp.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://events/queue" in uris
+
+    @pytest.mark.asyncio
+    async def test_event_queue_empty(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://events/queue")
+        data = json.loads(result.contents[0].content)
+        assert data["events"] == []
+        assert data["count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_event_queue_with_events(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_resources(fast_mcp, tool_ctx)
+
+        await em.push_event({"type": "message", "chat_id": 111, "text": "Hello"})
+        await em.push_event({"type": "command", "chat_id": 111, "text": "/help"})
+
+        result = await fast_mcp.read_resource("telegram://events/queue")
+        data = json.loads(result.contents[0].content)
+        assert data["count"] == 2
+        assert data["events"][0]["type"] == "message"
+        assert data["events"][1]["type"] == "command"
+
+    @pytest.mark.asyncio
+    async def test_event_queue_without_event_manager(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://events/queue")
+        data = json.loads(result.contents[0].content)
+        assert data["events"] == []
+        assert "note" in data
