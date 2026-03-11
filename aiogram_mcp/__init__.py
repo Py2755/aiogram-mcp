@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError, version
 
 from .context import BotContext
+from .events import EventManager
 from .middleware import MCPMiddleware
 from .server import AiogramMCP
 
@@ -13,4 +14,4 @@ try:
 except PackageNotFoundError:
     __version__ = "0.3.0"
 
-__all__ = ["AiogramMCP", "BotContext", "MCPMiddleware", "__version__"]
+__all__ = ["AiogramMCP", "BotContext", "EventManager", "MCPMiddleware", "__version__"]

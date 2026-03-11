@@ -1863,3 +1863,65 @@ class TestResourceEventQueue:
         data = json.loads(result.contents[0].content)
         assert data["events"] == []
         assert "note" in data
+
+
+# ---------------------------------------------------------------------------
+# AiogramMCP event integration
+# ---------------------------------------------------------------------------
+
+
+class TestAiogramMCPEvents:
+    def test_event_tools_registered(self, mock_bot, mock_dp):
+        em = EventManager()
+        mw = MCPMiddleware(event_manager=em)
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, middleware=mw, event_manager=em)
+        tool_names = get_tool_names(mcp.fastmcp)
+        assert "subscribe_events" in tool_names
+        assert "unsubscribe_events" in tool_names
+
+    def test_event_queue_resource_registered(self, mock_bot, mock_dp):
+        em = EventManager()
+        mw = MCPMiddleware(event_manager=em)
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, middleware=mw, event_manager=em)
+        resources = asyncio.run(mcp.fastmcp.list_resources())
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://events/queue" in uris
+
+    def test_event_manager_stored_in_context(self, mock_bot, mock_dp):
+        em = EventManager()
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, event_manager=em)
+        assert mcp._ctx.event_manager is em
+
+    def test_works_without_event_manager(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        assert mcp._ctx.event_manager is None
+        # Event tools should still be registered (they return error when no EM)
+        tool_names = get_tool_names(mcp.fastmcp)
+        assert "subscribe_events" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_event_flow(self, mock_bot, mock_dp):
+        """Middleware receives message -> EventManager stores it -> resource returns it."""
+        import json
+
+        em = EventManager()
+        mw = MCPMiddleware(event_manager=em)
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, middleware=mw, event_manager=em)
+
+        # Simulate incoming message through middleware
+        event = MagicMock(
+            chat=MagicMock(id=111),
+            from_user=MagicMock(id=222, username="alice"),
+            text="Hello from Telegram!",
+            message_id=1,
+            date=MagicMock(isoformat=lambda: "2026-03-11T12:00:00"),
+        )
+        handler = AsyncMock(return_value="ok")
+        await mw(handler, event, {})
+
+        # Read event queue resource
+        result = await mcp.fastmcp.read_resource("telegram://events/queue")
+        data = json.loads(result.contents[0].content)
+        assert data["count"] == 1
+        assert data["events"][0]["text"] == "Hello from Telegram!"
+        assert data["events"][0]["type"] == "message"
