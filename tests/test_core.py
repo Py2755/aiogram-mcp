@@ -1683,3 +1683,112 @@ class TestMiddlewareEventPush:
         await middleware(handler, event, {})
 
         assert em.get_events() == []
+
+
+# ---------------------------------------------------------------------------
+# Event subscription tools
+# ---------------------------------------------------------------------------
+
+
+class TestSubscribeEvents:
+    @pytest.mark.asyncio
+    async def test_subscribe_returns_subscription_id(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["subscribe_events"].fn()
+        assert result["ok"] is True
+        assert "subscription_id" in result
+
+    @pytest.mark.asyncio
+    async def test_subscribe_with_filters(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["subscribe_events"].fn(
+            chat_ids=[111, 222], event_types=["command"]
+        )
+        assert result["ok"] is True
+        assert result["chat_ids"] == [111, 222]
+        assert result["event_types"] == ["command"]
+
+    @pytest.mark.asyncio
+    async def test_subscribe_blocked_without_event_manager(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["subscribe_events"].fn()
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_subscribe_filtered_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(
+            bot=mock_bot, dp=mock_dp, event_manager=em, allowed_chat_ids=[111]
+        )
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["subscribe_events"].fn(chat_ids=[111, 999])
+        assert result["ok"] is False
+        assert "not in allowed_chat_ids" in result["error"]
+
+
+class TestUnsubscribeEvents:
+    @pytest.mark.asyncio
+    async def test_unsubscribe_existing(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        sub_result = await tools["subscribe_events"].fn()
+        sub_id = sub_result["subscription_id"]
+
+        result = await tools["unsubscribe_events"].fn(subscription_id=sub_id)
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_nonexistent(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        em = EventManager()
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, event_manager=em)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["unsubscribe_events"].fn(subscription_id="nonexistent")
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_without_event_manager(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.events import register_event_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_event_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["unsubscribe_events"].fn(subscription_id="abc")
+        assert result["ok"] is False
