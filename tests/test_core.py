@@ -9,6 +9,7 @@ import pytest
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from aiogram_mcp.context import BotContext
+from aiogram_mcp.events import EventManager, Subscription
 from aiogram_mcp.middleware import MCPMiddleware
 from aiogram_mcp.server import AiogramMCP
 
@@ -1489,3 +1490,127 @@ class TestAllPromptsRegistered:
         assert "moderation_prompt" in names
         assert "announcement_prompt" in names
         assert "user_report_prompt" in names
+
+
+# ---------------------------------------------------------------------------
+# Event Manager
+# ---------------------------------------------------------------------------
+
+
+class TestEventManager:
+    def test_initial_state(self):
+        em = EventManager()
+        assert em.get_events() == []
+        assert em.queue_size == 200
+
+    def test_custom_queue_size(self):
+        em = EventManager(queue_size=10)
+        assert em.queue_size == 10
+
+    @pytest.mark.asyncio
+    async def test_push_event_adds_to_queue(self):
+        em = EventManager(queue_size=100)
+        await em.push_event({
+            "type": "message",
+            "chat_id": 111,
+            "text": "Hello",
+        })
+        events = em.get_events()
+        assert len(events) == 1
+        assert events[0]["id"] == 1
+        assert events[0]["type"] == "message"
+        assert events[0]["chat_id"] == 111
+
+    @pytest.mark.asyncio
+    async def test_push_event_increments_id(self):
+        em = EventManager(queue_size=100)
+        await em.push_event({"type": "message", "chat_id": 111, "text": "A"})
+        await em.push_event({"type": "message", "chat_id": 111, "text": "B"})
+        events = em.get_events()
+        assert events[0]["id"] == 1
+        assert events[1]["id"] == 2
+
+    @pytest.mark.asyncio
+    async def test_get_events_since_id(self):
+        em = EventManager(queue_size=100)
+        await em.push_event({"type": "message", "chat_id": 111, "text": "A"})
+        await em.push_event({"type": "message", "chat_id": 111, "text": "B"})
+        await em.push_event({"type": "message", "chat_id": 111, "text": "C"})
+        events = em.get_events(since_id=1)
+        assert len(events) == 2
+        assert events[0]["text"] == "B"
+
+    @pytest.mark.asyncio
+    async def test_queue_respects_max_size(self):
+        em = EventManager(queue_size=3)
+        for i in range(5):
+            await em.push_event({"type": "message", "chat_id": 111, "text": f"msg-{i}"})
+        events = em.get_events()
+        assert len(events) == 3
+        assert events[0]["text"] == "msg-2"
+
+
+class TestEventManagerSubscriptions:
+    def test_subscribe_returns_id(self):
+        em = EventManager()
+        sub_id = em.subscribe(chat_ids=[111], event_types=["message"])
+        assert isinstance(sub_id, str)
+        assert len(sub_id) == 12
+
+    def test_unsubscribe_existing(self):
+        em = EventManager()
+        sub_id = em.subscribe()
+        assert em.unsubscribe(sub_id) is True
+
+    def test_unsubscribe_nonexistent(self):
+        em = EventManager()
+        assert em.unsubscribe("nonexistent") is False
+
+    def test_matches_all_when_no_filters(self):
+        em = EventManager()
+        sub = Subscription(id="test")
+        assert em._matches({"type": "message", "chat_id": 111}, sub) is True
+
+    def test_matches_chat_filter(self):
+        em = EventManager()
+        sub = Subscription(id="test", chat_ids=[111])
+        assert em._matches({"type": "message", "chat_id": 111}, sub) is True
+        assert em._matches({"type": "message", "chat_id": 999}, sub) is False
+
+    def test_matches_event_type_filter(self):
+        em = EventManager()
+        sub = Subscription(id="test", event_types=["command"])
+        assert em._matches({"type": "command", "chat_id": 111}, sub) is True
+        assert em._matches({"type": "message", "chat_id": 111}, sub) is False
+
+    def test_matches_combined_filters(self):
+        em = EventManager()
+        sub = Subscription(id="test", chat_ids=[111], event_types=["command"])
+        assert em._matches({"type": "command", "chat_id": 111}, sub) is True
+        assert em._matches({"type": "message", "chat_id": 111}, sub) is False
+        assert em._matches({"type": "command", "chat_id": 999}, sub) is False
+
+    @pytest.mark.asyncio
+    async def test_push_notifies_matching_subscriber(self):
+        em = EventManager()
+        session = AsyncMock()
+        em.subscribe(chat_ids=[111], event_types=["message"], session=session)
+        await em.push_event({"type": "message", "chat_id": 111, "text": "hi"})
+        session.send_resource_updated.assert_called_once_with("telegram://events/queue")
+
+    @pytest.mark.asyncio
+    async def test_push_skips_non_matching_subscriber(self):
+        em = EventManager()
+        session = AsyncMock()
+        em.subscribe(chat_ids=[999], event_types=["message"], session=session)
+        await em.push_event({"type": "message", "chat_id": 111, "text": "hi"})
+        session.send_resource_updated.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dead_session_removed(self):
+        em = EventManager()
+        session = AsyncMock()
+        session.send_resource_updated.side_effect = Exception("closed")
+        sub_id = em.subscribe(session=session)
+        await em.push_event({"type": "message", "chat_id": 111, "text": "hi"})
+        assert em.unsubscribe(sub_id) is False  # already removed
