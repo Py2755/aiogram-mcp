@@ -5,13 +5,37 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyPI version](https://img.shields.io/pypi/v/aiogram-mcp.svg)](https://pypi.org/project/aiogram-mcp/)
 
-MCP server middleware for aiogram Telegram bots.
+**Connect your Telegram bot to AI agents via the Model Context Protocol.**
 
-`aiogram-mcp` lets you expose an existing [aiogram](https://github.com/aiogram/aiogram) bot to [MCP](https://modelcontextprotocol.io/) clients such as Claude Desktop without rewriting handlers, routers, or business logic.
+`aiogram-mcp` turns any [aiogram](https://github.com/aiogram/aiogram) bot into an [MCP](https://modelcontextprotocol.io/) server. AI clients like Claude Desktop can then send messages, read chat history, build interactive menus, and react to events in real time — all through your existing bot, without rewriting a single handler.
 
-## Status
+## Why aiogram-mcp?
 
-**Beta** — the core API is stable but may change before 1.0.
+Most Telegram MCP servers are thin wrappers with 3-5 tools. `aiogram-mcp` goes further:
+
+- **21 tools** — messaging, moderation, interactive keyboards, event subscriptions, broadcasting
+- **5 resources** — bot info, config, chat lists, message history, event queue
+- **3 prompts** — ready-made moderation, announcement, and user report workflows
+- **Real-time events** — the bot pushes Telegram events to AI clients via MCP notifications (no polling)
+- **Interactive messages** — AI agents create inline keyboard menus, handle button presses, edit messages
+- **Zero rewrite** — add 5 lines to your existing bot, keep all your handlers
+
+## How It Works
+
+```
+Telegram users                Your aiogram bot              AI agent (Claude Desktop)
+      |                             |                              |
+      |  send messages, tap buttons |                              |
+      | --------------------------> |                              |
+      |                             |  MCP server (stdio or SSE)   |
+      |                             | <------------------------->  |
+      |                             |  tools / resources / events  |
+      |                             |                              |
+      |  bot replies, shows menus   |   send_message, edit, ban    |
+      | <-------------------------- | <--------------------------- |
+```
+
+The bot runs normally for Telegram users. The MCP server runs alongside it, giving AI agents access to the same bot via tools and resources.
 
 ## Installation
 
@@ -19,151 +43,178 @@ MCP server middleware for aiogram Telegram bots.
 pip install aiogram-mcp
 ```
 
-Requirements:
-
-- Python 3.10+
-- aiogram 3.20+
+Requires Python 3.10+ and aiogram 3.20+.
 
 ## Quickstart
 
+### 1. Add aiogram-mcp to your bot
+
 ```python
+import asyncio
 from aiogram import Bot, Dispatcher
-from aiogram_mcp import AiogramMCP
+from aiogram_mcp import AiogramMCP, EventManager, MCPMiddleware
 
 bot = Bot(token="YOUR_BOT_TOKEN")
 dp = Dispatcher()
 
-# Register your normal handlers here.
-
-mcp = AiogramMCP(bot=bot, dp=dp)
-await mcp.run_alongside_bot(transport="stdio")
-```
-
-Available transports:
-
-- `stdio` for Claude Desktop and local MCP clients
-- `sse` for remote HTTP-based MCP connections
-
-## Built-in Tools
-
-Messaging:
-
-- `send_message`
-- `send_photo`
-- `forward_message`
-- `delete_message`
-- `pin_message`
-
-Users:
-
-- `get_bot_info`
-- `get_chat_member_info`
-- `get_user_profile_photos`
-
-Chats:
-
-- `get_chat_info`
-- `get_chat_members_count`
-- `ban_user`
-- `unban_user`
-- `set_chat_title`
-- `set_chat_description`
-
-Interactive:
-
-- `send_interactive_message`
-- `edit_message`
-- `answer_callback_query`
-
-Events:
-
-- `subscribe_events`
-- `unsubscribe_events`
-
-Broadcast:
-
-- `broadcast` when `enable_broadcast=True`
-
-## MCP Resources
-
-Read-only data exposed to AI agents without tool calls:
-
-| URI | Description |
-|---|---|
-| `telegram://bot/info` | Bot metadata (username, capabilities) |
-| `telegram://config` | Server configuration and allowed chat IDs |
-| `telegram://chats` | Active chats the bot has seen (requires middleware) |
-| `telegram://chats/{chat_id}/history` | Recent message history for a chat |
-| `telegram://events/queue` | Real-time event queue (requires EventManager) |
-
-Resources require `MCPMiddleware` to be attached for chat tracking and message history.
-
-## MCP Prompts
-
-Ready-made workflows that give AI agents structured context instead of raw tools:
-
-| Prompt | Arguments | Description |
-|---|---|---|
-| `moderation_prompt` | `chat_id`, `user_id`, `reason` | Review user behavior with message history and suggest moderation action |
-| `announcement_prompt` | `topic`, `audience?`, `tone?` | Draft a Telegram announcement with formatting guidelines |
-| `user_report_prompt` | `chat_id`, `user_id` | Compile a comprehensive user activity report |
-
-Prompts that access chat data require `MCPMiddleware` for message history and `allowed_chat_ids` for access control.
-
-## Real-time Event Streaming
-
-AI agents can receive Telegram events in real time instead of polling:
-
-| Component | Type | Description |
-|---|---|---|
-| `subscribe_events` | Tool | Subscribe to events with chat/type filters |
-| `unsubscribe_events` | Tool | Remove a subscription by ID |
-| `telegram://events/queue` | Resource | Read queued events with auto-incrementing IDs |
-
-```python
-from aiogram_mcp import AiogramMCP, EventManager, MCPMiddleware
-
+# Middleware tracks chats, users, message history, and events
 event_manager = EventManager()
 middleware = MCPMiddleware(event_manager=event_manager)
 dp.message.middleware(middleware)
+dp.callback_query.middleware(middleware)  # for interactive buttons
 
+# Register your normal handlers here
+# @dp.message(...)
+# async def my_handler(message): ...
+
+# Create the MCP server
 mcp = AiogramMCP(
-    bot=bot, dp=dp,
+    bot=bot,
+    dp=dp,
+    name="my-bot",
     middleware=middleware,
     event_manager=event_manager,
+    allowed_chat_ids=[123456789],  # optional: restrict which chats AI can access
 )
+
+async def main():
+    await mcp.run_alongside_bot(transport="stdio")
+
+asyncio.run(main())
 ```
 
-When subscribed, AI clients receive MCP `notifications/resources/updated` on new events and can read the queue resource to get event data. Event types: `message`, `command`, `callback_query`.
+### 2. Connect Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "my-telegram-bot": {
+      "command": "python",
+      "args": ["path/to/your/bot.py"],
+      "env": {
+        "BOT_TOKEN": "123456:ABC-DEF..."
+      }
+    }
+  }
+}
+```
+
+Now Claude can send messages, read history, create button menus, and react to events in your Telegram bot.
+
+## Built-in Tools
+
+### Messaging (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `send_message` | Send text with HTML/Markdown formatting |
+| `send_photo` | Send a photo by URL with optional caption |
+| `forward_message` | Forward a message between chats |
+| `delete_message` | Delete a message |
+| `pin_message` | Pin a message in a chat |
+
+### Interactive Messages (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `send_interactive_message` | Send a message with inline keyboard buttons (callback or URL) |
+| `edit_message` | Edit text and/or keyboard of an existing message |
+| `answer_callback_query` | Respond to a button press with a toast or alert |
+
+### Users (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `get_bot_info` | Get bot metadata (username, capabilities) |
+| `get_chat_member_info` | Get a user's role and profile in a chat |
+| `get_user_profile_photos` | Get a user's profile photos |
+
+### Chats (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `get_chat_info` | Get chat metadata (title, type, description) |
+| `get_chat_members_count` | Get number of members in a chat |
+| `ban_user` | Ban a user (permanent or temporary) |
+| `unban_user` | Unban a user |
+| `set_chat_title` | Change the chat title |
+| `set_chat_description` | Change the chat description |
+
+### Events (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `subscribe_events` | Subscribe to real-time events with chat/type filters |
+| `unsubscribe_events` | Remove a subscription |
+
+### Broadcast (1 tool, opt-in)
+
+| Tool | Description |
+|------|-------------|
+| `broadcast` | Send a message to multiple chats (requires `enable_broadcast=True`) |
+
+## MCP Resources
+
+Read-only data that AI agents can access without calling tools:
+
+| URI | Description |
+|-----|-------------|
+| `telegram://bot/info` | Bot username, ID, and capabilities |
+| `telegram://config` | Server name and allowed chat IDs |
+| `telegram://chats` | List of active chats with metadata |
+| `telegram://chats/{chat_id}/history` | Last 50 messages in a chat |
+| `telegram://events/queue` | Event queue with auto-incrementing IDs |
+
+## MCP Prompts
+
+Pre-built workflows that give AI agents structured context:
+
+| Prompt | Arguments | What it does |
+|--------|-----------|-------------|
+| `moderation_prompt` | `chat_id`, `user_id`, `reason` | Fetches user info + message history, suggests warn/mute/ban |
+| `announcement_prompt` | `topic`, `audience?`, `tone?` | Drafts a formatted Telegram announcement |
+| `user_report_prompt` | `chat_id`, `user_id` | Compiles a full user activity report |
+
+## Real-time Event Streaming
+
+AI agents don't need to poll. The bot pushes events automatically:
+
+```
+Telegram message arrives
+    → MCPMiddleware captures it
+        → EventManager stores it (type: "message", "command", or "callback_query")
+            → MCP notification sent to subscribed clients
+                → AI agent reads telegram://events/queue
+```
+
+The AI agent calls `subscribe_events` once, then receives push notifications whenever new events match its filters.
 
 ## Interactive Messages
 
-AI agents can create interactive Telegram messages with inline keyboard buttons:
+AI agents can build full interactive UIs in Telegram — menus, confirmations, multi-step wizards:
 
-```python
-# Send a message with buttons
-await send_interactive_message(
-    chat_id=123,
-    text="Choose an option:",
-    buttons=[
-        [{"text": "Yes", "callback_data": "yes"}, {"text": "No", "callback_data": "no"}],
-        [{"text": "Visit docs", "url": "https://example.com"}],
-    ],
-)
-
-# Edit message text and buttons
-await edit_message(chat_id=123, message_id=42, text="Updated!", buttons=[...])
-
-# Answer button press
-await answer_callback_query(callback_query_id="abc123", text="Done!")
+**The AI agent sends a message with buttons:**
+```
+┌─────────────────────────┐
+│ Confirm deployment?     │
+│                         │
+│  [✅ Yes]  [❌ No]      │
+│  [📖 View docs]        │
+└─────────────────────────┘
 ```
 
-Register middleware on `dp.callback_query` to capture button presses as events:
-
-```python
-dp.message.middleware(mcp_middleware)
-dp.callback_query.middleware(mcp_middleware)  # enables callback tracking
+**User taps a button → event appears in the queue → AI agent reacts:**
 ```
+┌─────────────────────────┐
+│ ✅ Deployed!            │
+│                         │
+│  [📋 View logs]        │
+└─────────────────────────┘
+```
+
+The bot needs `dp.callback_query.middleware(middleware)` to capture button presses.
 
 ## Safety Controls
 
@@ -171,44 +222,34 @@ dp.callback_query.middleware(mcp_middleware)  # enables callback tracking
 mcp = AiogramMCP(
     bot=bot,
     dp=dp,
-    name="my-bot",
-    allowed_chat_ids=[123456789, -1001234567890],
-    enable_broadcast=True,
-    max_broadcast_recipients=500,
+    allowed_chat_ids=[123456789, -1001234567890],  # restrict AI access
+    enable_broadcast=True,            # opt-in for broadcast tool
+    max_broadcast_recipients=500,     # safety limit
 )
 ```
 
-Use `MCPMiddleware` to track chats, users, and message history for MCP resources:
+- **`allowed_chat_ids`** — AI can only interact with listed chats. Default: all chats.
+- **`enable_broadcast`** — broadcast tool is disabled by default as a safety measure.
+- **`max_broadcast_recipients`** — caps the number of chats in a single broadcast.
 
-```python
-from aiogram_mcp import AiogramMCP, MCPMiddleware
+## Examples
 
-tracker = MCPMiddleware(history_size=50)
-dp.message.middleware(tracker)
-
-mcp = AiogramMCP(bot=bot, dp=dp, middleware=tracker, enable_broadcast=True)
-```
+| Example | Transport | Features |
+|---------|-----------|----------|
+| [basic_bot.py](examples/basic_bot.py) | stdio | Full setup with middleware, events, and callback tracking |
+| [incident_alert_bot.py](examples/incident_alert_bot.py) | SSE | Broadcast-enabled ops bot for incident notifications |
 
 ## Development
 
 ```bash
+git clone https://github.com/Py2755/aiogram-mcp.git
+cd aiogram-mcp
 pip install -e ".[dev]"
+
+pytest -v          # 150 tests
 ruff check aiogram_mcp tests examples
-mypy aiogram_mcp
-pytest -v
+mypy aiogram_mcp   # strict mode
 ```
-
-Project layout:
-
-- `aiogram_mcp/` package source
-- `tests/` unit tests
-- `examples/` runnable usage examples
-- `.github/workflows/ci.yml` GitHub Actions pipeline
-
-## Examples
-
-- [basic_bot.py](examples/basic_bot.py)
-- [incident_alert_bot.py](examples/incident_alert_bot.py)
 
 ## License
 
