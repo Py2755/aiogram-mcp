@@ -104,3 +104,21 @@ def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
 
         events = ctx.event_manager.get_events()
         return json.dumps({"events": events, "count": len(events)})
+
+    @mcp.resource("telegram://files/{file_id}")
+    async def file_info(file_id: str) -> str:
+        """Metadata for a Telegram file.
+
+        Returns file_id, file_unique_id, file_size, and file_path.
+        Use the file_path with the Telegram Bot API download endpoint to retrieve the file.
+        """
+        try:
+            f = await ctx.bot.get_file(file_id)
+            return json.dumps({
+                "file_id": f.file_id,
+                "file_unique_id": f.file_unique_id,
+                "file_size": f.file_size,
+                "file_path": f.file_path,
+            })
+        except (TelegramBadRequest, TelegramForbiddenError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
