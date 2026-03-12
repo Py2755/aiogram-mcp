@@ -69,6 +69,12 @@ Chats:
 - `set_chat_title`
 - `set_chat_description`
 
+Interactive:
+
+- `send_interactive_message`
+- `edit_message`
+- `answer_callback_query`
+
 Events:
 
 - `subscribe_events`
@@ -128,7 +134,36 @@ mcp = AiogramMCP(
 )
 ```
 
-When subscribed, AI clients receive MCP `notifications/resources/updated` on new events and can read the queue resource to get event data. Event types: `message`, `command`.
+When subscribed, AI clients receive MCP `notifications/resources/updated` on new events and can read the queue resource to get event data. Event types: `message`, `command`, `callback_query`.
+
+## Interactive Messages
+
+AI agents can create interactive Telegram messages with inline keyboard buttons:
+
+```python
+# Send a message with buttons
+await send_interactive_message(
+    chat_id=123,
+    text="Choose an option:",
+    buttons=[
+        [{"text": "Yes", "callback_data": "yes"}, {"text": "No", "callback_data": "no"}],
+        [{"text": "Visit docs", "url": "https://example.com"}],
+    ],
+)
+
+# Edit message text and buttons
+await edit_message(chat_id=123, message_id=42, text="Updated!", buttons=[...])
+
+# Answer button press
+await answer_callback_query(callback_query_id="abc123", text="Done!")
+```
+
+Register middleware on `dp.callback_query` to capture button presses as events:
+
+```python
+dp.message.middleware(mcp_middleware)
+dp.callback_query.middleware(mcp_middleware)  # enables callback tracking
+```
 
 ## Safety Controls
 

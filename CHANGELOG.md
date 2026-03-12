@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 (2026-03-12)
+
+### Added
+- Interactive messages with inline keyboard buttons (Phase 4)
+- `send_interactive_message` tool — send messages with inline keyboard (callback buttons + URL buttons)
+- `edit_message` tool — edit text and/or inline keyboard of existing messages
+- `answer_callback_query` tool — respond to inline button presses
+- `MCPMiddleware` now detects callback queries and pushes `callback_query` events to EventManager
+- Button validation: checks for required `text` field and `callback_data` or `url` action
+- Register middleware on `dp.callback_query` to enable callback tracking
+
 ## 0.4.0 (2026-03-11)
 
 ### Added
