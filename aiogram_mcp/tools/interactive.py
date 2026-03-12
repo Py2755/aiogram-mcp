@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from fastmcp import FastMCP
 
 from ..context import BotContext
+from ..models import ToolResponse
+from ..utils import normalize_parse_mode
 
-ToolResult = dict[str, Any]
+
+class SendInteractiveResult(ToolResponse):
+    message_id: int | None = None
+    chat_id: int | None = None
+    date: str | None = None
+
+
+class EditMessageResult(ToolResponse):
+    message_id: int | None = None
+    chat_id: int | None = None
+
+
+class AnswerCallbackResult(ToolResponse):
+    callback_query_id: str | None = None
 
 
 def _build_keyboard(
@@ -43,17 +55,6 @@ def _build_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _normalize_parse_mode(parse_mode: str | None) -> ParseMode | None:
-    if parse_mode is None:
-        return None
-    normalized = parse_mode.strip().upper()
-    if normalized == "HTML":
-        return ParseMode.HTML
-    if normalized in {"MARKDOWN", "MARKDOWNV2"}:
-        return ParseMode.MARKDOWN_V2
-    raise ValueError("parse_mode must be one of: HTML, Markdown, MarkdownV2, or None")
-
-
 def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
     @mcp.tool
     async def send_interactive_message(
@@ -62,7 +63,7 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
         buttons: list[list[dict[str, str]]],
         parse_mode: str | None = "HTML",
         disable_notification: bool = False,
-    ) -> ToolResult:
+    ) -> SendInteractiveResult:
         """Send a message with inline keyboard buttons.
 
         Args:
@@ -74,33 +75,33 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
             disable_notification: Send silently.
         """
         if not ctx.is_chat_allowed(chat_id):
-            return {
-                "ok": False,
-                "error": f"Chat {chat_id} is not in allowed_chat_ids.",
-            }
+            return SendInteractiveResult(
+                ok=False,
+                error=f"Chat {chat_id} is not in allowed_chat_ids.",
+            )
 
         keyboard = _build_keyboard(buttons)
         if isinstance(keyboard, str):
-            return {"ok": False, "error": keyboard}
+            return SendInteractiveResult(ok=False, error=keyboard)
 
         try:
             msg = await ctx.bot.send_message(
                 chat_id=chat_id,
                 text=text,
-                parse_mode=_normalize_parse_mode(parse_mode),
+                parse_mode=normalize_parse_mode(parse_mode),
                 reply_markup=keyboard,
                 disable_notification=disable_notification,
             )
-            return {
-                "ok": True,
-                "message_id": msg.message_id,
-                "chat_id": msg.chat.id,
-                "date": msg.date.isoformat(),
-            }
+            return SendInteractiveResult(
+                ok=True,
+                message_id=msg.message_id,
+                chat_id=msg.chat.id,
+                date=msg.date.isoformat(),
+            )
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendInteractiveResult(ok=False, error=str(exc))
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendInteractiveResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def edit_message(
@@ -109,7 +110,7 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
         text: str,
         buttons: list[list[dict[str, str]]] | None = None,
         parse_mode: str | None = "HTML",
-    ) -> ToolResult:
+    ) -> EditMessageResult:
         """Edit the text and/or inline keyboard of an existing message.
 
         Args:
@@ -120,16 +121,16 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
             parse_mode: HTML, Markdown, MarkdownV2, or None.
         """
         if not ctx.is_chat_allowed(chat_id):
-            return {
-                "ok": False,
-                "error": f"Chat {chat_id} is not in allowed_chat_ids.",
-            }
+            return EditMessageResult(
+                ok=False,
+                error=f"Chat {chat_id} is not in allowed_chat_ids.",
+            )
 
         reply_markup = None
         if buttons is not None:
             keyboard = _build_keyboard(buttons)
             if isinstance(keyboard, str):
-                return {"ok": False, "error": keyboard}
+                return EditMessageResult(ok=False, error=keyboard)
             reply_markup = keyboard
 
         try:
@@ -137,27 +138,27 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 chat_id=chat_id,
                 message_id=message_id,
                 text=text,
-                parse_mode=_normalize_parse_mode(parse_mode),
+                parse_mode=normalize_parse_mode(parse_mode),
                 reply_markup=reply_markup,
             )
             if isinstance(result, bool):
-                return {"ok": True, "message_id": message_id, "chat_id": chat_id}
-            return {
-                "ok": True,
-                "message_id": result.message_id,
-                "chat_id": result.chat.id,
-            }
+                return EditMessageResult(ok=True, message_id=message_id, chat_id=chat_id)
+            return EditMessageResult(
+                ok=True,
+                message_id=result.message_id,
+                chat_id=result.chat.id,
+            )
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return EditMessageResult(ok=False, error=str(exc))
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return EditMessageResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def answer_callback_query(
         callback_query_id: str,
         text: str | None = None,
         show_alert: bool = False,
-    ) -> ToolResult:
+    ) -> AnswerCallbackResult:
         """Answer a callback query from an inline keyboard button press.
 
         Args:
@@ -171,6 +172,6 @@ def register_interactive_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 text=text,
                 show_alert=show_alert,
             )
-            return {"ok": True, "callback_query_id": callback_query_id}
+            return AnswerCallbackResult(ok=True, callback_query_id=callback_query_id)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return AnswerCallbackResult(ok=False, error=str(exc))
