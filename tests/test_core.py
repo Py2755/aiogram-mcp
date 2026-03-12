@@ -113,6 +113,48 @@ def mock_bot():
     bot.set_chat_title = AsyncMock(return_value=True)
     bot.set_chat_description = AsyncMock(return_value=True)
     bot.session = MagicMock(close=AsyncMock())
+    bot.send_document = AsyncMock(
+        return_value=MagicMock(message_id=50, chat=MagicMock(id=111))
+    )
+    bot.send_voice = AsyncMock(
+        return_value=MagicMock(message_id=51, chat=MagicMock(id=111))
+    )
+    bot.send_video = AsyncMock(
+        return_value=MagicMock(message_id=52, chat=MagicMock(id=111))
+    )
+    bot.send_animation = AsyncMock(
+        return_value=MagicMock(message_id=53, chat=MagicMock(id=111))
+    )
+    bot.send_audio = AsyncMock(
+        return_value=MagicMock(message_id=54, chat=MagicMock(id=111))
+    )
+    bot.send_sticker = AsyncMock(
+        return_value=MagicMock(message_id=55, chat=MagicMock(id=111))
+    )
+    bot.send_video_note = AsyncMock(
+        return_value=MagicMock(message_id=56, chat=MagicMock(id=111))
+    )
+    bot.send_contact = AsyncMock(
+        return_value=MagicMock(message_id=57, chat=MagicMock(id=111))
+    )
+    bot.send_location = AsyncMock(
+        return_value=MagicMock(message_id=58, chat=MagicMock(id=111))
+    )
+    bot.send_poll = AsyncMock(
+        return_value=MagicMock(
+            message_id=59,
+            chat=MagicMock(id=111),
+            poll=MagicMock(id="poll_123"),
+        )
+    )
+    bot.get_file = AsyncMock(
+        return_value=MagicMock(
+            file_id="file_abc",
+            file_unique_id="unique_abc",
+            file_size=125432,
+            file_path="documents/file_42.pdf",
+        )
+    )
     return bot
 
 
@@ -2329,3 +2371,472 @@ class TestAiogramMCPInteractive:
             callback_query_id="cb_001", text="Confirmed!"
         )
         assert result.ok is True
+
+
+# ---------------------------------------------------------------------------
+# Media tools
+# ---------------------------------------------------------------------------
+
+
+class TestAiogramMCPMedia:
+    def test_media_tools_registered(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        tool_names = get_tool_names(mcp.fastmcp)
+        expected_media = [
+            "send_document", "send_voice", "send_video", "send_animation",
+            "send_audio", "send_sticker", "send_video_note", "send_contact",
+            "send_location", "send_poll",
+        ]
+        for name in expected_media:
+            assert name in tool_names, f"Media tool '{name}' not registered"
+
+
+class TestSendDocument:
+    @pytest.mark.asyncio
+    async def test_send_document_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_document"].fn(
+            chat_id=111, document_url="https://example.com/file.pdf"
+        )
+        assert result.ok is True
+        assert result.message_id == 50
+
+    @pytest.mark.asyncio
+    async def test_send_document_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_document"].fn(
+            chat_id=999, document_url="https://example.com/file.pdf"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_document_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_document = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file too large")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_document"].fn(
+            chat_id=111, document_url="https://example.com/file.pdf"
+        )
+        assert result.ok is False
+
+
+class TestSendVoice:
+    @pytest.mark.asyncio
+    async def test_send_voice_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_voice"].fn(
+            chat_id=111, voice_url="https://example.com/voice.ogg"
+        )
+        assert result.ok is True
+        assert result.message_id == 51
+
+    @pytest.mark.asyncio
+    async def test_send_voice_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_voice"].fn(
+            chat_id=999, voice_url="https://example.com/voice.ogg"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_voice_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_voice = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_voice"].fn(
+            chat_id=111, voice_url="https://example.com/voice.ogg"
+        )
+        assert result.ok is False
+
+
+class TestSendVideo:
+    @pytest.mark.asyncio
+    async def test_send_video_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video"].fn(
+            chat_id=111, video_url="https://example.com/video.mp4"
+        )
+        assert result.ok is True
+        assert result.message_id == 52
+
+    @pytest.mark.asyncio
+    async def test_send_video_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video"].fn(
+            chat_id=999, video_url="https://example.com/video.mp4"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_video_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_video = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video"].fn(
+            chat_id=111, video_url="https://example.com/video.mp4"
+        )
+        assert result.ok is False
+
+
+class TestSendAnimation:
+    @pytest.mark.asyncio
+    async def test_send_animation_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_animation"].fn(
+            chat_id=111, animation_url="https://example.com/anim.gif"
+        )
+        assert result.ok is True
+        assert result.message_id == 53
+
+    @pytest.mark.asyncio
+    async def test_send_animation_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_animation"].fn(
+            chat_id=999, animation_url="https://example.com/anim.gif"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_animation_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_animation = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_animation"].fn(
+            chat_id=111, animation_url="https://example.com/anim.gif"
+        )
+        assert result.ok is False
+
+
+class TestSendAudio:
+    @pytest.mark.asyncio
+    async def test_send_audio_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_audio"].fn(
+            chat_id=111, audio_url="https://example.com/song.mp3"
+        )
+        assert result.ok is True
+        assert result.message_id == 54
+
+    @pytest.mark.asyncio
+    async def test_send_audio_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_audio"].fn(
+            chat_id=999, audio_url="https://example.com/song.mp3"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_audio_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_audio = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_audio"].fn(
+            chat_id=111, audio_url="https://example.com/song.mp3"
+        )
+        assert result.ok is False
+
+
+class TestSendSticker:
+    @pytest.mark.asyncio
+    async def test_send_sticker_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_sticker"].fn(
+            chat_id=111, sticker="sticker_file_id"
+        )
+        assert result.ok is True
+        assert result.message_id == 55
+
+    @pytest.mark.asyncio
+    async def test_send_sticker_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_sticker"].fn(
+            chat_id=999, sticker="sticker_file_id"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_sticker_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_sticker = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="invalid sticker")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_sticker"].fn(
+            chat_id=111, sticker="sticker_file_id"
+        )
+        assert result.ok is False
+
+
+class TestSendVideoNote:
+    @pytest.mark.asyncio
+    async def test_send_video_note_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video_note"].fn(
+            chat_id=111, video_note_url="https://example.com/note.mp4"
+        )
+        assert result.ok is True
+        assert result.message_id == 56
+
+    @pytest.mark.asyncio
+    async def test_send_video_note_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video_note"].fn(
+            chat_id=999, video_note_url="https://example.com/note.mp4"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_video_note_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_video_note = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="file not found")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_video_note"].fn(
+            chat_id=111, video_note_url="https://example.com/note.mp4"
+        )
+        assert result.ok is False
+
+
+class TestSendContact:
+    @pytest.mark.asyncio
+    async def test_send_contact_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_contact"].fn(
+            chat_id=111, phone_number="+1234567890", first_name="John"
+        )
+        assert result.ok is True
+        assert result.message_id == 57
+
+    @pytest.mark.asyncio
+    async def test_send_contact_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_contact"].fn(
+            chat_id=999, phone_number="+1234567890", first_name="John"
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_contact_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_contact = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="bad request")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_contact"].fn(
+            chat_id=111, phone_number="+1234567890", first_name="John"
+        )
+        assert result.ok is False
+
+
+class TestSendLocation:
+    @pytest.mark.asyncio
+    async def test_send_location_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_location"].fn(
+            chat_id=111, latitude=55.7558, longitude=37.6173
+        )
+        assert result.ok is True
+        assert result.message_id == 58
+
+    @pytest.mark.asyncio
+    async def test_send_location_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_location"].fn(
+            chat_id=999, latitude=55.7558, longitude=37.6173
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_location_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_location = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="bad request")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_location"].fn(
+            chat_id=111, latitude=55.7558, longitude=37.6173
+        )
+        assert result.ok is False
+
+
+class TestSendPoll:
+    @pytest.mark.asyncio
+    async def test_send_poll_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_poll"].fn(
+            chat_id=111, question="Favorite?", options=["A", "B", "C"]
+        )
+        assert result.ok is True
+        assert result.message_id == 59
+        assert result.poll_id == "poll_123"
+
+    @pytest.mark.asyncio
+    async def test_send_poll_blocked(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_poll"].fn(
+            chat_id=999, question="Favorite?", options=["A", "B", "C"]
+        )
+        assert result.ok is False
+
+    @pytest.mark.asyncio
+    async def test_send_poll_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.media import register_media_tools
+
+        mock_bot.send_poll = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="bad poll")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_media_tools(fast_mcp, tool_ctx)
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_poll"].fn(
+            chat_id=111, question="Favorite?", options=["A", "B", "C"]
+        )
+        assert result.ok is False
