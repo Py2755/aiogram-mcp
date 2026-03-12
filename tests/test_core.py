@@ -2201,3 +2201,131 @@ class TestAnswerCallbackQuery:
             callback_query_id="abc123"
         )
         assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Middleware callback query detection
+# ---------------------------------------------------------------------------
+
+
+class TestMiddlewareCallbackQuery:
+    @pytest.mark.asyncio
+    async def test_pushes_callback_query_event(self):
+        em = EventManager()
+        middleware = MCPMiddleware(event_manager=em)
+        event = MagicMock(
+            chat=None,
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            data="yes",
+            message=MagicMock(
+                chat=MagicMock(id=111),
+                message_id=42,
+            ),
+        )
+        event.id = "callback_123"
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        events = em.get_events()
+        assert len(events) == 1
+        assert events[0]["type"] == "callback_query"
+        assert events[0]["callback_data"] == "yes"
+        assert events[0]["callback_query_id"] == "callback_123"
+        assert events[0]["chat_id"] == 111
+        assert events[0]["message_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_callback_no_event_manager(self):
+        middleware = MCPMiddleware()
+        event = MagicMock(
+            chat=None,
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            data="yes",
+            message=MagicMock(
+                chat=MagicMock(id=111),
+                message_id=42,
+            ),
+        )
+        event.id = "callback_123"
+        handler = AsyncMock(return_value="ok")
+        result = await middleware(handler, event, {})
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_callback_tracks_chat_and_user(self):
+        middleware = MCPMiddleware()
+        event = MagicMock(
+            chat=None,
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            data="yes",
+            message=MagicMock(
+                chat=MagicMock(id=111),
+                message_id=42,
+            ),
+        )
+        event.id = "callback_123"
+        handler = AsyncMock(return_value="ok")
+        await middleware(handler, event, {})
+
+        # Callback query should NOT track chat from event.chat (it's None)
+        # But it SHOULD track user
+        assert 222 in middleware.active_user_ids
+
+
+# ---------------------------------------------------------------------------
+# AiogramMCP interactive integration
+# ---------------------------------------------------------------------------
+
+
+class TestAiogramMCPInteractive:
+    def test_interactive_tools_registered(self, mock_bot, mock_dp):
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp)
+        tool_names = get_tool_names(mcp.fastmcp)
+        assert "send_interactive_message" in tool_names
+        assert "edit_message" in tool_names
+        assert "answer_callback_query" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_interactive_flow(self, mock_bot, mock_dp):
+        """Send interactive message -> callback event -> answer callback."""
+        em = EventManager()
+        mw = MCPMiddleware(event_manager=em)
+        mcp = AiogramMCP(bot=mock_bot, dp=mock_dp, middleware=mw, event_manager=em)
+
+        # 1. Send interactive message
+        tools = await get_tool_map(mcp.fastmcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Confirm?",
+            buttons=[[{"text": "Yes", "callback_data": "confirm_yes"}]],
+        )
+        assert result["ok"] is True
+        msg_id = result["message_id"]
+
+        # 2. Simulate callback query via middleware
+        cb_event = MagicMock(
+            chat=None,
+            from_user=MagicMock(id=222, username="alice"),
+            text=None,
+            data="confirm_yes",
+            message=MagicMock(chat=MagicMock(id=111), message_id=msg_id),
+        )
+        cb_event.id = "cb_001"
+        handler = AsyncMock(return_value="ok")
+        await mw(handler, cb_event, {})
+
+        # 3. Check event was captured
+        events = em.get_events()
+        assert len(events) == 1
+        assert events[0]["type"] == "callback_query"
+        assert events[0]["callback_data"] == "confirm_yes"
+
+        # 4. Answer callback
+        mock_bot.answer_callback_query = AsyncMock(return_value=True)
+        result = await tools["answer_callback_query"].fn(
+            callback_query_id="cb_001", text="Confirmed!"
+        )
+        assert result["ok"] is True

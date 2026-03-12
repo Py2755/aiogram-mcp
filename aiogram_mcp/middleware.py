@@ -72,4 +72,32 @@ class MCPMiddleware(BaseMiddleware):
                     "date": event_date.isoformat() if event_date else None,
                 })
 
+        # Detect callback queries (inline button presses).
+        # Check isinstance(str) to distinguish real callback_data from other event types
+        # where `data` may not exist (CallbackQuery.data is always a str).
+        callback_data = getattr(event, "data", None)
+        if isinstance(callback_data, str) and self.event_manager is not None:
+            cb_message = getattr(event, "message", None)
+            cb_chat_id = None
+            cb_message_id = None
+            if cb_message is not None:
+                cb_chat = getattr(cb_message, "chat", None)
+                if cb_chat is not None:
+                    cb_chat_id = getattr(cb_chat, "id", None)
+                    if cb_chat_id is not None:
+                        self.active_chat_ids.add(cb_chat_id)
+                cb_message_id = getattr(cb_message, "message_id", None)
+
+            await self.event_manager.push_event({
+                "type": "callback_query",
+                "callback_query_id": getattr(event, "id", None),
+                "callback_data": callback_data,
+                "chat_id": cb_chat_id,
+                "message_id": cb_message_id,
+                "from_user_id": user.id if user else None,
+                "from_username": (
+                    getattr(user, "username", None) if user else None
+                ),
+            })
+
         return await handler(event, data)

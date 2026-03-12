@@ -22,6 +22,7 @@ dp = Dispatcher()
 event_manager = EventManager()
 mcp_middleware = MCPMiddleware(event_manager=event_manager)
 dp.message.middleware(mcp_middleware)
+dp.callback_query.middleware(mcp_middleware)
 
 
 @dp.message(CommandStart())
