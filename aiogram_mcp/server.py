@@ -17,6 +17,7 @@ from .resources import register_resources
 from .tools.broadcast import register_broadcast_tools
 from .tools.chats import register_chat_tools
 from .tools.events import register_event_tools
+from .tools.interactive import register_interactive_tools
 from .tools.messaging import register_messaging_tools
 from .tools.users import register_user_tools
 
@@ -70,6 +71,7 @@ class AiogramMCP:
         register_resources(self._mcp, self._ctx)
         register_prompts(self._mcp, self._ctx)
         register_event_tools(self._mcp, self._ctx)
+        register_interactive_tools(self._mcp, self._ctx)
 
         if self.enable_broadcast:
             register_broadcast_tools(

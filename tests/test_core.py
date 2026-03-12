@@ -1925,3 +1925,279 @@ class TestAiogramMCPEvents:
         assert data["count"] == 1
         assert data["events"][0]["text"] == "Hello from Telegram!"
         assert data["events"][0]["type"] == "message"
+
+
+# ---------------------------------------------------------------------------
+# Interactive message tools
+# ---------------------------------------------------------------------------
+
+
+class TestSendInteractiveMessage:
+    @pytest.mark.asyncio
+    async def test_send_with_callback_buttons(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Choose an option:",
+            buttons=[
+                [
+                    {"text": "Yes", "callback_data": "yes"},
+                    {"text": "No", "callback_data": "no"},
+                ]
+            ],
+        )
+        assert result["ok"] is True
+        assert result["message_id"] == 42
+        mock_bot.send_message.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_with_url_buttons(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Visit us:",
+            buttons=[[{"text": "Website", "url": "https://example.com"}]],
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_send_with_mixed_buttons(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Menu:",
+            buttons=[
+                [{"text": "Option A", "callback_data": "a"}],
+                [{"text": "Help", "url": "https://example.com"}],
+            ],
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_send_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=999,
+            text="Blocked",
+            buttons=[[{"text": "X", "callback_data": "x"}]],
+        )
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_send_invalid_button_missing_text(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Bad",
+            buttons=[[{"callback_data": "x"}]],
+        )
+        assert result["ok"] is False
+        assert "text" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_send_invalid_button_no_action(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Bad",
+            buttons=[[{"text": "X"}]],
+        )
+        assert result["ok"] is False
+        assert "callback_data" in result["error"] or "url" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_send_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.send_message = AsyncMock(
+            side_effect=TelegramBadRequest(
+                method=MagicMock(), message="bad markup"
+            )
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["send_interactive_message"].fn(
+            chat_id=111,
+            text="Fail",
+            buttons=[[{"text": "X", "callback_data": "x"}]],
+        )
+        assert result["ok"] is False
+
+
+class TestEditMessage:
+    @pytest.mark.asyncio
+    async def test_edit_text_only(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.edit_message_text = AsyncMock(
+            return_value=MagicMock(message_id=42, chat=MagicMock(id=111))
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["edit_message"].fn(
+            chat_id=111, message_id=42, text="Updated text"
+        )
+        assert result["ok"] is True
+        mock_bot.edit_message_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_edit_with_buttons(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.edit_message_text = AsyncMock(
+            return_value=MagicMock(message_id=42, chat=MagicMock(id=111))
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["edit_message"].fn(
+            chat_id=111,
+            message_id=42,
+            text="Pick one:",
+            buttons=[[{"text": "A", "callback_data": "a"}]],
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_edit_blocked_by_allowlist(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp, allowed_chat_ids=[111])
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["edit_message"].fn(
+            chat_id=999, message_id=42, text="Blocked"
+        )
+        assert result["ok"] is False
+
+    @pytest.mark.asyncio
+    async def test_edit_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.edit_message_text = AsyncMock(
+            side_effect=TelegramBadRequest(
+                method=MagicMock(), message="message not modified"
+            )
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["edit_message"].fn(
+            chat_id=111, message_id=42, text="Same text"
+        )
+        assert result["ok"] is False
+
+
+class TestAnswerCallbackQuery:
+    @pytest.mark.asyncio
+    async def test_answer_success(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.answer_callback_query = AsyncMock(return_value=True)
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["answer_callback_query"].fn(
+            callback_query_id="abc123", text="Done!"
+        )
+        assert result["ok"] is True
+        mock_bot.answer_callback_query.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_answer_with_alert(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.answer_callback_query = AsyncMock(return_value=True)
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["answer_callback_query"].fn(
+            callback_query_id="abc123", text="Warning!", show_alert=True
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_answer_no_text(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.answer_callback_query = AsyncMock(return_value=True)
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["answer_callback_query"].fn(
+            callback_query_id="abc123"
+        )
+        assert result["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_answer_telegram_error(self, mock_bot, mock_dp):
+        from aiogram_mcp.tools.interactive import register_interactive_tools
+
+        mock_bot.answer_callback_query = AsyncMock(
+            side_effect=TelegramBadRequest(
+                method=MagicMock(), message="query is too old"
+            )
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_interactive_tools(fast_mcp, tool_ctx)
+
+        tools = await get_tool_map(fast_mcp)
+        result = await tools["answer_callback_query"].fn(
+            callback_query_id="abc123"
+        )
+        assert result["ok"] is False
