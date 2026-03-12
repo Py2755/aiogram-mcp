@@ -3,19 +3,45 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from fastmcp import FastMCP
 
 from ..context import BotContext
+from ..models import OkResult, ToolResponse
 
-ToolResult = dict[str, Any]
+
+class ChatInfoResult(ToolResponse):
+    id: int | None = None
+    type: str | None = None
+    title: str | None = None
+    username: str | None = None
+    description: str | None = None
+    member_count: int | None = None
+    is_forum: bool | None = None
+
+
+class ChatMembersCountResult(ToolResponse):
+    count: int | None = None
+
+
+class BanUserResult(ToolResponse):
+    user_id: int | None = None
+    permanent: bool | None = None
+    until: str | None = None
+
+
+class UnbanUserResult(ToolResponse):
+    user_id: int | None = None
+
+
+class SetChatTitleResult(ToolResponse):
+    new_title: str | None = None
 
 
 def register_chat_tools(mcp: FastMCP, ctx: BotContext) -> None:
     @mcp.tool
-    async def get_chat_info(chat_id: int) -> ToolResult:
+    async def get_chat_info(chat_id: int) -> ChatInfoResult:
         """Get details about a chat."""
         try:
             chat = await ctx.bot.get_chat(chat_id)
@@ -25,27 +51,27 @@ def register_chat_tools(mcp: FastMCP, ctx: BotContext) -> None:
             except (TelegramBadRequest, TelegramForbiddenError):
                 member_count = None
 
-            return {
-                "ok": True,
-                "id": chat.id,
-                "type": getattr(chat.type, "value", str(chat.type)),
-                "title": getattr(chat, "title", None),
-                "username": getattr(chat, "username", None),
-                "description": getattr(chat, "description", None),
-                "member_count": member_count,
-                "is_forum": getattr(chat, "is_forum", False),
-            }
+            return ChatInfoResult(
+                ok=True,
+                id=chat.id,
+                type=getattr(chat.type, "value", str(chat.type)),
+                title=getattr(chat, "title", None),
+                username=getattr(chat, "username", None),
+                description=getattr(chat, "description", None),
+                member_count=member_count,
+                is_forum=getattr(chat, "is_forum", False),
+            )
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return ChatInfoResult(ok=False, error=str(exc))
 
     @mcp.tool
-    async def get_chat_members_count(chat_id: int) -> ToolResult:
+    async def get_chat_members_count(chat_id: int) -> ChatMembersCountResult:
         """Get the number of members in a chat."""
         try:
             count = await ctx.bot.get_chat_member_count(chat_id=chat_id)
-            return {"ok": True, "count": count}
+            return ChatMembersCountResult(ok=True, count=count)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return ChatMembersCountResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def ban_user(
@@ -53,10 +79,10 @@ def register_chat_tools(mcp: FastMCP, ctx: BotContext) -> None:
         user_id: int,
         ban_duration_hours: int | None = None,
         revoke_messages: bool = False,
-    ) -> ToolResult:
+    ) -> BanUserResult:
         """Ban a user from a chat."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return BanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         until_date = None
         if ban_duration_hours:
@@ -69,24 +95,24 @@ def register_chat_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 until_date=until_date,
                 revoke_messages=revoke_messages,
             )
-            return {
-                "ok": True,
-                "user_id": user_id,
-                "permanent": until_date is None,
-                "until": until_date.isoformat() if until_date else None,
-            }
+            return BanUserResult(
+                ok=True,
+                user_id=user_id,
+                permanent=until_date is None,
+                until=until_date.isoformat() if until_date else None,
+            )
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return BanUserResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def unban_user(
         chat_id: int,
         user_id: int,
         only_if_banned: bool = True,
-    ) -> ToolResult:
+    ) -> UnbanUserResult:
         """Unban a previously banned user."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return UnbanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             await ctx.bot.unban_chat_member(
@@ -94,30 +120,30 @@ def register_chat_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 user_id=user_id,
                 only_if_banned=only_if_banned,
             )
-            return {"ok": True, "user_id": user_id}
+            return UnbanUserResult(ok=True, user_id=user_id)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return UnbanUserResult(ok=False, error=str(exc))
 
     @mcp.tool
-    async def set_chat_title(chat_id: int, title: str) -> ToolResult:
+    async def set_chat_title(chat_id: int, title: str) -> SetChatTitleResult:
         """Change the title of a group or channel."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return SetChatTitleResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             await ctx.bot.set_chat_title(chat_id=chat_id, title=title)
-            return {"ok": True, "new_title": title}
+            return SetChatTitleResult(ok=True, new_title=title)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return SetChatTitleResult(ok=False, error=str(exc))
 
     @mcp.tool
-    async def set_chat_description(chat_id: int, description: str) -> ToolResult:
+    async def set_chat_description(chat_id: int, description: str) -> OkResult:
         """Change the description of a group or channel."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             await ctx.bot.set_chat_description(chat_id=chat_id, description=description)
-            return {"ok": True}
+            return OkResult(ok=True)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return OkResult(ok=False, error=str(exc))
