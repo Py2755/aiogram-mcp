@@ -356,8 +356,8 @@ class TestSendMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["send_message"].fn(chat_id=111, text="Hello test")
-        assert result["ok"] is True
-        assert result["message_id"] == 42
+        assert result.ok is True
+        assert result.message_id == 42
 
     @pytest.mark.asyncio
     async def test_send_message_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -369,8 +369,8 @@ class TestSendMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["send_message"].fn(chat_id=999, text="Should be blocked")
-        assert result["ok"] is False
-        assert "not in the allowed_chat_ids" in result["error"]
+        assert result.ok is False
+        assert "not in the allowed_chat_ids" in result.error
 
     @pytest.mark.asyncio
     async def test_send_message_rejects_invalid_parse_mode(self, mock_bot, mock_dp):
@@ -386,8 +386,8 @@ class TestSendMessage:
             text="Hello test",
             parse_mode="invalid",
         )
-        assert result["ok"] is False
-        assert "parse_mode must be one of" in result["error"]
+        assert result.ok is False
+        assert "parse_mode must be one of" in result.error
 
     @pytest.mark.asyncio
     async def test_send_message_telegram_forbidden(self, mock_bot, mock_dp):
@@ -402,8 +402,8 @@ class TestSendMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["send_message"].fn(chat_id=111, text="Hello")
-        assert result["ok"] is False
-        assert "blocked" in result["error"].lower() or "permission" in result["error"].lower()
+        assert result.ok is False
+        assert "blocked" in result.error.lower() or "permission" in result.error.lower()
 
     @pytest.mark.asyncio
     async def test_send_message_telegram_bad_request(self, mock_bot, mock_dp):
@@ -418,7 +418,7 @@ class TestSendMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["send_message"].fn(chat_id=111, text="Hello")
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestSendPhoto:
@@ -434,8 +434,8 @@ class TestSendPhoto:
         result = await tools["send_photo"].fn(
             chat_id=111, photo_url="https://example.com/photo.jpg"
         )
-        assert result["ok"] is True
-        assert result["message_id"] == 43
+        assert result.ok is True
+        assert result.message_id == 43
 
     @pytest.mark.asyncio
     async def test_send_photo_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -449,7 +449,7 @@ class TestSendPhoto:
         result = await tools["send_photo"].fn(
             chat_id=999, photo_url="https://example.com/photo.jpg"
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestForwardMessage:
@@ -465,8 +465,8 @@ class TestForwardMessage:
         result = await tools["forward_message"].fn(
             to_chat_id=111, from_chat_id=222, message_id=1
         )
-        assert result["ok"] is True
-        assert result["message_id"] == 44
+        assert result.ok is True
+        assert result.message_id == 44
 
     @pytest.mark.asyncio
     async def test_forward_message_blocked(self, mock_bot, mock_dp):
@@ -480,7 +480,7 @@ class TestForwardMessage:
         result = await tools["forward_message"].fn(
             to_chat_id=999, from_chat_id=111, message_id=1
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestDeleteMessage:
@@ -494,7 +494,7 @@ class TestDeleteMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["delete_message"].fn(chat_id=111, message_id=42)
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_delete_message_blocked(self, mock_bot, mock_dp):
@@ -506,7 +506,7 @@ class TestDeleteMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["delete_message"].fn(chat_id=999, message_id=42)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestPinMessage:
@@ -520,7 +520,7 @@ class TestPinMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["pin_message"].fn(chat_id=111, message_id=42)
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_pin_message_blocked(self, mock_bot, mock_dp):
@@ -532,7 +532,7 @@ class TestPinMessage:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["pin_message"].fn(chat_id=999, message_id=42)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -551,10 +551,10 @@ class TestGetBotInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_bot_info"].fn()
-        assert result["ok"] is True
-        assert result["id"] == 123456789
-        assert result["username"] == "test_bot"
-        assert result["is_bot"] is True
+        assert result.ok is True
+        assert result.id == 123456789
+        assert result.username == "test_bot"
+        assert result.is_bot is True
 
 
 class TestGetChatMemberInfo:
@@ -568,10 +568,10 @@ class TestGetChatMemberInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_member_info"].fn(chat_id=111, user_id=555)
-        assert result["ok"] is True
-        assert result["user_id"] == 555
-        assert result["status"] == "member"
-        assert result["username"] == "testuser"
+        assert result.ok is True
+        assert result.user_id == 555
+        assert result.status == "member"
+        assert result.username == "testuser"
 
     @pytest.mark.asyncio
     async def test_get_chat_member_info_blocked(self, mock_bot, mock_dp):
@@ -583,7 +583,7 @@ class TestGetChatMemberInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_member_info"].fn(chat_id=999, user_id=555)
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_get_chat_member_info_telegram_error(self, mock_bot, mock_dp):
@@ -598,7 +598,7 @@ class TestGetChatMemberInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_member_info"].fn(chat_id=111, user_id=999)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestGetUserProfilePhotos:
@@ -612,10 +612,10 @@ class TestGetUserProfilePhotos:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_user_profile_photos"].fn(user_id=555)
-        assert result["ok"] is True
-        assert result["total_count"] == 1
-        assert len(result["photos"]) == 1
-        assert result["photos"][0][0]["file_id"] == "photo_id_1"
+        assert result.ok is True
+        assert result.total_count == 1
+        assert len(result.photos) == 1
+        assert result.photos[0][0]["file_id"] == "photo_id_1"
 
     @pytest.mark.asyncio
     async def test_get_user_profile_photos_invalid_limit(self, mock_bot, mock_dp):
@@ -627,8 +627,8 @@ class TestGetUserProfilePhotos:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_user_profile_photos"].fn(user_id=555, limit=0)
-        assert result["ok"] is False
-        assert "limit" in result["error"]
+        assert result.ok is False
+        assert "limit" in result.error
 
     @pytest.mark.asyncio
     async def test_get_user_profile_photos_limit_too_high(self, mock_bot, mock_dp):
@@ -640,7 +640,7 @@ class TestGetUserProfilePhotos:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_user_profile_photos"].fn(user_id=555, limit=101)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -659,10 +659,10 @@ class TestGetChatInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_info"].fn(chat_id=-1001234)
-        assert result["ok"] is True
-        assert result["type"] == "supergroup"
-        assert result["title"] == "Test Group"
-        assert result["member_count"] == 42
+        assert result.ok is True
+        assert result.type == "supergroup"
+        assert result.title == "Test Group"
+        assert result.member_count == 42
 
     @pytest.mark.asyncio
     async def test_get_chat_info_telegram_error(self, mock_bot, mock_dp):
@@ -677,7 +677,7 @@ class TestGetChatInfo:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_info"].fn(chat_id=999)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestGetChatMembersCount:
@@ -691,8 +691,8 @@ class TestGetChatMembersCount:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_members_count"].fn(chat_id=-1001234)
-        assert result["ok"] is True
-        assert result["count"] == 42
+        assert result.ok is True
+        assert result.count == 42
 
     @pytest.mark.asyncio
     async def test_get_chat_members_count_error(self, mock_bot, mock_dp):
@@ -709,7 +709,7 @@ class TestGetChatMembersCount:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["get_chat_members_count"].fn(chat_id=-1001234)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestBanUser:
@@ -723,9 +723,9 @@ class TestBanUser:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["ban_user"].fn(chat_id=111, user_id=555)
-        assert result["ok"] is True
-        assert result["permanent"] is True
-        assert result["until"] is None
+        assert result.ok is True
+        assert result.permanent is True
+        assert result.until is None
 
     @pytest.mark.asyncio
     async def test_ban_user_temporary(self, mock_bot, mock_dp):
@@ -739,9 +739,9 @@ class TestBanUser:
         result = await tools["ban_user"].fn(
             chat_id=111, user_id=555, ban_duration_hours=24
         )
-        assert result["ok"] is True
-        assert result["permanent"] is False
-        assert result["until"] is not None
+        assert result.ok is True
+        assert result.permanent is False
+        assert result.until is not None
 
     @pytest.mark.asyncio
     async def test_ban_user_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -753,7 +753,7 @@ class TestBanUser:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["ban_user"].fn(chat_id=999, user_id=555)
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_ban_user_telegram_error(self, mock_bot, mock_dp):
@@ -770,7 +770,7 @@ class TestBanUser:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["ban_user"].fn(chat_id=111, user_id=555)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestUnbanUser:
@@ -784,8 +784,8 @@ class TestUnbanUser:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["unban_user"].fn(chat_id=111, user_id=555)
-        assert result["ok"] is True
-        assert result["user_id"] == 555
+        assert result.ok is True
+        assert result.user_id == 555
 
     @pytest.mark.asyncio
     async def test_unban_user_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -797,7 +797,7 @@ class TestUnbanUser:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["unban_user"].fn(chat_id=999, user_id=555)
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestSetChatTitle:
@@ -811,8 +811,8 @@ class TestSetChatTitle:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["set_chat_title"].fn(chat_id=111, title="New Title")
-        assert result["ok"] is True
-        assert result["new_title"] == "New Title"
+        assert result.ok is True
+        assert result.new_title == "New Title"
 
     @pytest.mark.asyncio
     async def test_set_chat_title_blocked(self, mock_bot, mock_dp):
@@ -824,7 +824,7 @@ class TestSetChatTitle:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["set_chat_title"].fn(chat_id=999, title="Hack")
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestSetChatDescription:
@@ -840,7 +840,7 @@ class TestSetChatDescription:
         result = await tools["set_chat_description"].fn(
             chat_id=111, description="New desc"
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_set_chat_description_blocked(self, mock_bot, mock_dp):
@@ -854,7 +854,7 @@ class TestSetChatDescription:
         result = await tools["set_chat_description"].fn(
             chat_id=999, description="Hack"
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -874,9 +874,9 @@ class TestBroadcast:
         tools = await get_tool_map(fast_mcp)
         result = await tools["broadcast"].fn(chat_ids=[111, 222], text="Planned maintenance")
 
-        assert result["ok"] is True
-        assert result["dry_run"] is True
-        assert result["would_send_to"] == 2
+        assert result.ok is True
+        assert result.dry_run is True
+        assert result.would_send_to == 2
 
     @pytest.mark.asyncio
     async def test_broadcast_exceeds_recipient_limit(self, mock_bot, mock_dp):
@@ -890,8 +890,8 @@ class TestBroadcast:
         result = await tools["broadcast"].fn(
             chat_ids=[1, 2, 3], text="Too many"
         )
-        assert result["ok"] is False
-        assert "exceeds safety limit" in result["error"]
+        assert result.ok is False
+        assert "exceeds safety limit" in result.error
 
     @pytest.mark.asyncio
     async def test_broadcast_blocked_chats(self, mock_bot, mock_dp):
@@ -905,8 +905,8 @@ class TestBroadcast:
         result = await tools["broadcast"].fn(
             chat_ids=[111, 999], text="Hello"
         )
-        assert result["ok"] is False
-        assert "not in allowed_chat_ids" in result["error"]
+        assert result.ok is False
+        assert "not in allowed_chat_ids" in result.error
 
     @pytest.mark.asyncio
     async def test_broadcast_actual_send(self, mock_bot, mock_dp):
@@ -923,10 +923,10 @@ class TestBroadcast:
             dry_run=False,
             delay_seconds=0,
         )
-        assert result["ok"] is True
-        assert result["dry_run"] is False
-        assert result["success_count"] == 2
-        assert result["failed_count"] == 0
+        assert result.ok is True
+        assert result.dry_run is False
+        assert result.success_count == 2
+        assert result.failed_count == 0
 
     @pytest.mark.asyncio
     async def test_broadcast_partial_failure(self, mock_bot, mock_dp):
@@ -954,9 +954,9 @@ class TestBroadcast:
             dry_run=False,
             delay_seconds=0,
         )
-        assert result["ok"] is True
-        assert result["success_count"] == 2
-        assert result["failed_count"] == 1
+        assert result.ok is True
+        assert result.success_count == 2
+        assert result.failed_count == 1
 
     @pytest.mark.asyncio
     async def test_broadcast_invalid_parse_mode(self, mock_bot, mock_dp):
@@ -973,8 +973,8 @@ class TestBroadcast:
             parse_mode="invalid",
             dry_run=False,
         )
-        assert result["ok"] is False
-        assert "parse_mode" in result["error"]
+        assert result.ok is False
+        assert "parse_mode" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -1184,32 +1184,32 @@ class TestResourceChatHistory:
 
 class TestNormalizeParseMode:
     def test_none_returns_none(self):
-        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+        from aiogram_mcp.utils import normalize_parse_mode
 
-        assert _normalize_parse_mode(None) is None
+        assert normalize_parse_mode(None) is None
 
     def test_html(self):
         from aiogram.enums import ParseMode
 
-        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+        from aiogram_mcp.utils import normalize_parse_mode
 
-        assert _normalize_parse_mode("HTML") == ParseMode.HTML
-        assert _normalize_parse_mode("html") == ParseMode.HTML
-        assert _normalize_parse_mode("  Html  ") == ParseMode.HTML
+        assert normalize_parse_mode("HTML") == ParseMode.HTML
+        assert normalize_parse_mode("html") == ParseMode.HTML
+        assert normalize_parse_mode("  Html  ") == ParseMode.HTML
 
     def test_markdown(self):
         from aiogram.enums import ParseMode
 
-        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+        from aiogram_mcp.utils import normalize_parse_mode
 
-        assert _normalize_parse_mode("Markdown") == ParseMode.MARKDOWN_V2
-        assert _normalize_parse_mode("MarkdownV2") == ParseMode.MARKDOWN_V2
+        assert normalize_parse_mode("Markdown") == ParseMode.MARKDOWN_V2
+        assert normalize_parse_mode("MarkdownV2") == ParseMode.MARKDOWN_V2
 
     def test_invalid_raises(self):
-        from aiogram_mcp.tools.messaging import _normalize_parse_mode
+        from aiogram_mcp.utils import normalize_parse_mode
 
         with pytest.raises(ValueError):
-            _normalize_parse_mode("xml")
+            normalize_parse_mode("xml")
 
 
 # ---------------------------------------------------------------------------
@@ -1702,8 +1702,8 @@ class TestSubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["subscribe_events"].fn()
-        assert result["ok"] is True
-        assert "subscription_id" in result
+        assert result.ok is True
+        assert result.subscription_id is not None
 
     @pytest.mark.asyncio
     async def test_subscribe_with_filters(self, mock_bot, mock_dp):
@@ -1718,9 +1718,9 @@ class TestSubscribeEvents:
         result = await tools["subscribe_events"].fn(
             chat_ids=[111, 222], event_types=["command"]
         )
-        assert result["ok"] is True
-        assert result["chat_ids"] == [111, 222]
-        assert result["event_types"] == ["command"]
+        assert result.ok is True
+        assert result.chat_ids == [111, 222]
+        assert result.event_types == ["command"]
 
     @pytest.mark.asyncio
     async def test_subscribe_blocked_without_event_manager(self, mock_bot, mock_dp):
@@ -1732,7 +1732,7 @@ class TestSubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["subscribe_events"].fn()
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_subscribe_filtered_by_allowlist(self, mock_bot, mock_dp):
@@ -1747,8 +1747,8 @@ class TestSubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["subscribe_events"].fn(chat_ids=[111, 999])
-        assert result["ok"] is False
-        assert "not in allowed_chat_ids" in result["error"]
+        assert result.ok is False
+        assert "not in allowed_chat_ids" in result.error
 
 
 class TestUnsubscribeEvents:
@@ -1763,10 +1763,10 @@ class TestUnsubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         sub_result = await tools["subscribe_events"].fn()
-        sub_id = sub_result["subscription_id"]
+        sub_id = sub_result.subscription_id
 
         result = await tools["unsubscribe_events"].fn(subscription_id=sub_id)
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_unsubscribe_nonexistent(self, mock_bot, mock_dp):
@@ -1779,7 +1779,7 @@ class TestUnsubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["unsubscribe_events"].fn(subscription_id="nonexistent")
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_unsubscribe_without_event_manager(self, mock_bot, mock_dp):
@@ -1791,7 +1791,7 @@ class TestUnsubscribeEvents:
 
         tools = await get_tool_map(fast_mcp)
         result = await tools["unsubscribe_events"].fn(subscription_id="abc")
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -1952,8 +1952,8 @@ class TestSendInteractiveMessage:
                 ]
             ],
         )
-        assert result["ok"] is True
-        assert result["message_id"] == 42
+        assert result.ok is True
+        assert result.message_id == 42
         mock_bot.send_message.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1970,7 +1970,7 @@ class TestSendInteractiveMessage:
             text="Visit us:",
             buttons=[[{"text": "Website", "url": "https://example.com"}]],
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_send_with_mixed_buttons(self, mock_bot, mock_dp):
@@ -1989,7 +1989,7 @@ class TestSendInteractiveMessage:
                 [{"text": "Help", "url": "https://example.com"}],
             ],
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_send_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -2005,7 +2005,7 @@ class TestSendInteractiveMessage:
             text="Blocked",
             buttons=[[{"text": "X", "callback_data": "x"}]],
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_send_invalid_button_missing_text(self, mock_bot, mock_dp):
@@ -2021,8 +2021,8 @@ class TestSendInteractiveMessage:
             text="Bad",
             buttons=[[{"callback_data": "x"}]],
         )
-        assert result["ok"] is False
-        assert "text" in result["error"]
+        assert result.ok is False
+        assert "text" in result.error
 
     @pytest.mark.asyncio
     async def test_send_invalid_button_no_action(self, mock_bot, mock_dp):
@@ -2038,8 +2038,8 @@ class TestSendInteractiveMessage:
             text="Bad",
             buttons=[[{"text": "X"}]],
         )
-        assert result["ok"] is False
-        assert "callback_data" in result["error"] or "url" in result["error"]
+        assert result.ok is False
+        assert "callback_data" in result.error or "url" in result.error
 
     @pytest.mark.asyncio
     async def test_send_telegram_error(self, mock_bot, mock_dp):
@@ -2060,7 +2060,7 @@ class TestSendInteractiveMessage:
             text="Fail",
             buttons=[[{"text": "X", "callback_data": "x"}]],
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestEditMessage:
@@ -2079,7 +2079,7 @@ class TestEditMessage:
         result = await tools["edit_message"].fn(
             chat_id=111, message_id=42, text="Updated text"
         )
-        assert result["ok"] is True
+        assert result.ok is True
         mock_bot.edit_message_text.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2100,7 +2100,7 @@ class TestEditMessage:
             text="Pick one:",
             buttons=[[{"text": "A", "callback_data": "a"}]],
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_edit_blocked_by_allowlist(self, mock_bot, mock_dp):
@@ -2114,7 +2114,7 @@ class TestEditMessage:
         result = await tools["edit_message"].fn(
             chat_id=999, message_id=42, text="Blocked"
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
     @pytest.mark.asyncio
     async def test_edit_telegram_error(self, mock_bot, mock_dp):
@@ -2133,7 +2133,7 @@ class TestEditMessage:
         result = await tools["edit_message"].fn(
             chat_id=111, message_id=42, text="Same text"
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 class TestAnswerCallbackQuery:
@@ -2150,7 +2150,7 @@ class TestAnswerCallbackQuery:
         result = await tools["answer_callback_query"].fn(
             callback_query_id="abc123", text="Done!"
         )
-        assert result["ok"] is True
+        assert result.ok is True
         mock_bot.answer_callback_query.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2166,7 +2166,7 @@ class TestAnswerCallbackQuery:
         result = await tools["answer_callback_query"].fn(
             callback_query_id="abc123", text="Warning!", show_alert=True
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_answer_no_text(self, mock_bot, mock_dp):
@@ -2181,7 +2181,7 @@ class TestAnswerCallbackQuery:
         result = await tools["answer_callback_query"].fn(
             callback_query_id="abc123"
         )
-        assert result["ok"] is True
+        assert result.ok is True
 
     @pytest.mark.asyncio
     async def test_answer_telegram_error(self, mock_bot, mock_dp):
@@ -2200,7 +2200,7 @@ class TestAnswerCallbackQuery:
         result = await tools["answer_callback_query"].fn(
             callback_query_id="abc123"
         )
-        assert result["ok"] is False
+        assert result.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -2302,8 +2302,8 @@ class TestAiogramMCPInteractive:
             text="Confirm?",
             buttons=[[{"text": "Yes", "callback_data": "confirm_yes"}]],
         )
-        assert result["ok"] is True
-        msg_id = result["message_id"]
+        assert result.ok is True
+        msg_id = result.message_id
 
         # 2. Simulate callback query via middleware
         cb_event = MagicMock(
@@ -2328,4 +2328,4 @@ class TestAiogramMCPInteractive:
         result = await tools["answer_callback_query"].fn(
             callback_query_id="cb_001", text="Confirmed!"
         )
-        assert result["ok"] is True
+        assert result.ok is True
