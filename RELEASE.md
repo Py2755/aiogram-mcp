@@ -27,8 +27,8 @@ python examples/basic_bot.py
 3. Create and push a tag:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 4. Confirm GitHub Actions completed successfully.
