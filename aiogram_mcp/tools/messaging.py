@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import ReplyParameters
 from fastmcp import FastMCP
 
 from ..context import BotContext
+from ..models import OkResult, ToolResponse
+from ..utils import normalize_parse_mode
 
-ToolResult = dict[str, Any]
+
+class SendMessageResult(ToolResponse):
+    message_id: int | None = None
+    chat_id: int | None = None
+    date: str | None = None
 
 
-def _normalize_parse_mode(parse_mode: str | None) -> ParseMode | None:
-    if parse_mode is None:
-        return None
-    normalized = parse_mode.strip().upper()
-    if normalized == "HTML":
-        return ParseMode.HTML
-    if normalized in {"MARKDOWN", "MARKDOWNV2"}:
-        return ParseMode.MARKDOWN_V2
-    raise ValueError("parse_mode must be one of: HTML, Markdown, MarkdownV2, or None")
+class SendPhotoResult(ToolResponse):
+    message_id: int | None = None
+    chat_id: int | None = None
+
+
+class ForwardMessageResult(ToolResponse):
+    message_id: int | None = None
 
 
 def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
@@ -33,19 +34,19 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
         parse_mode: str | None = "HTML",
         disable_notification: bool = False,
         reply_to_message_id: int | None = None,
-    ) -> ToolResult:
+    ) -> SendMessageResult:
         """Send a text message to a Telegram chat or user."""
         if not ctx.is_chat_allowed(chat_id):
-            return {
-                "ok": False,
-                "error": f"Chat {chat_id} is not in the allowed_chat_ids whitelist.",
-            }
+            return SendMessageResult(
+                ok=False,
+                error=f"Chat {chat_id} is not in the allowed_chat_ids whitelist.",
+            )
 
         try:
             msg = await ctx.bot.send_message(
                 chat_id=chat_id,
                 text=text,
-                parse_mode=_normalize_parse_mode(parse_mode),
+                parse_mode=normalize_parse_mode(parse_mode),
                 disable_notification=disable_notification,
                 reply_parameters=(
                     ReplyParameters(message_id=reply_to_message_id)
@@ -53,18 +54,20 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
                     else None
                 ),
             )
-            return {
-                "ok": True,
-                "message_id": msg.message_id,
-                "chat_id": msg.chat.id,
-                "date": msg.date.isoformat(),
-            }
+            return SendMessageResult(
+                ok=True,
+                message_id=msg.message_id,
+                chat_id=msg.chat.id,
+                date=msg.date.isoformat(),
+            )
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendMessageResult(ok=False, error=str(exc))
         except TelegramForbiddenError:
-            return {"ok": False, "error": "Bot was blocked by the user or lacks permission."}
+            return SendMessageResult(
+                ok=False, error="Bot was blocked by the user or lacks permission."
+            )
         except TelegramBadRequest as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendMessageResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def send_photo(
@@ -73,24 +76,24 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
         caption: str | None = None,
         parse_mode: str | None = "HTML",
         disable_notification: bool = False,
-    ) -> ToolResult:
+    ) -> SendPhotoResult:
         """Send a photo to a Telegram chat."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return SendPhotoResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             msg = await ctx.bot.send_photo(
                 chat_id=chat_id,
                 photo=photo_url,
                 caption=caption,
-                parse_mode=_normalize_parse_mode(parse_mode),
+                parse_mode=normalize_parse_mode(parse_mode),
                 disable_notification=disable_notification,
             )
-            return {"ok": True, "message_id": msg.message_id, "chat_id": msg.chat.id}
+            return SendPhotoResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendPhotoResult(ok=False, error=str(exc))
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return SendPhotoResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def forward_message(
@@ -98,10 +101,12 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
         from_chat_id: int,
         message_id: int,
         disable_notification: bool = False,
-    ) -> ToolResult:
+    ) -> ForwardMessageResult:
         """Forward an existing message from one chat to another."""
         if not ctx.is_chat_allowed(to_chat_id):
-            return {"ok": False, "error": f"Chat {to_chat_id} is not allowed."}
+            return ForwardMessageResult(
+                ok=False, error=f"Chat {to_chat_id} is not allowed."
+            )
 
         try:
             msg = await ctx.bot.forward_message(
@@ -110,31 +115,31 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 message_id=message_id,
                 disable_notification=disable_notification,
             )
-            return {"ok": True, "message_id": msg.message_id}
+            return ForwardMessageResult(ok=True, message_id=msg.message_id)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return ForwardMessageResult(ok=False, error=str(exc))
 
     @mcp.tool
-    async def delete_message(chat_id: int, message_id: int) -> ToolResult:
+    async def delete_message(chat_id: int, message_id: int) -> OkResult:
         """Delete a message from a chat."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             await ctx.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            return {"ok": True}
+            return OkResult(ok=True)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return OkResult(ok=False, error=str(exc))
 
     @mcp.tool
     async def pin_message(
         chat_id: int,
         message_id: int,
         disable_notification: bool = False,
-    ) -> ToolResult:
+    ) -> OkResult:
         """Pin a message in a chat."""
         if not ctx.is_chat_allowed(chat_id):
-            return {"ok": False, "error": f"Chat {chat_id} is not allowed."}
+            return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
         try:
             await ctx.bot.pin_chat_message(
@@ -142,6 +147,6 @@ def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
                 message_id=message_id,
                 disable_notification=disable_notification,
             )
-            return {"ok": True}
+            return OkResult(ok=True)
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return {"ok": False, "error": str(exc)}
+            return OkResult(ok=False, error=str(exc))
