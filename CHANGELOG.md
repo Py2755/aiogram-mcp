@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 (2026-03-11)
+
+### Added
+- Real-time event streaming (Phase 3)
+- `EventManager` class for managing event queues and client subscriptions
+- `subscribe_events` tool — subscribe to Telegram events with chat/type filters
+- `unsubscribe_events` tool — remove event subscriptions
+- `telegram://events/queue` resource — read queued events with auto-incrementing IDs
+- `MCPMiddleware` now pushes events to `EventManager` (message and command types)
+- Push notifications via MCP `notifications/resources/updated` for subscribed clients
+- Dead session cleanup — disconnected subscribers are automatically removed
+
 ## 0.3.0 (2026-03-08)
 
 ### Added

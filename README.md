@@ -69,6 +69,11 @@ Chats:
 - `set_chat_title`
 - `set_chat_description`
 
+Events:
+
+- `subscribe_events`
+- `unsubscribe_events`
+
 Broadcast:
 
 - `broadcast` when `enable_broadcast=True`
@@ -83,6 +88,7 @@ Read-only data exposed to AI agents without tool calls:
 | `telegram://config` | Server configuration and allowed chat IDs |
 | `telegram://chats` | Active chats the bot has seen (requires middleware) |
 | `telegram://chats/{chat_id}/history` | Recent message history for a chat |
+| `telegram://events/queue` | Real-time event queue (requires EventManager) |
 
 Resources require `MCPMiddleware` to be attached for chat tracking and message history.
 
@@ -97,6 +103,32 @@ Ready-made workflows that give AI agents structured context instead of raw tools
 | `user_report_prompt` | `chat_id`, `user_id` | Compile a comprehensive user activity report |
 
 Prompts that access chat data require `MCPMiddleware` for message history and `allowed_chat_ids` for access control.
+
+## Real-time Event Streaming
+
+AI agents can receive Telegram events in real time instead of polling:
+
+| Component | Type | Description |
+|---|---|---|
+| `subscribe_events` | Tool | Subscribe to events with chat/type filters |
+| `unsubscribe_events` | Tool | Remove a subscription by ID |
+| `telegram://events/queue` | Resource | Read queued events with auto-incrementing IDs |
+
+```python
+from aiogram_mcp import AiogramMCP, EventManager, MCPMiddleware
+
+event_manager = EventManager()
+middleware = MCPMiddleware(event_manager=event_manager)
+dp.message.middleware(middleware)
+
+mcp = AiogramMCP(
+    bot=bot, dp=dp,
+    middleware=middleware,
+    event_manager=event_manager,
+)
+```
+
+When subscribed, AI clients receive MCP `notifications/resources/updated` on new events and can read the queue resource to get event data. Event types: `message`, `command`.
 
 ## Safety Controls
 
