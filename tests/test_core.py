@@ -2840,3 +2840,51 @@ class TestSendPoll:
             chat_id=111, question="Favorite?", options=["A", "B", "C"]
         )
         assert result.ok is False
+
+
+class TestResourceFileInfo:
+    @pytest.mark.asyncio
+    async def test_file_info_resource_template(self, mock_bot, mock_dp):
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        templates = await fast_mcp.list_resource_templates()
+        uris = [str(t.uri_template) for t in templates]
+        assert any("file_id" in u for u in uris)
+
+    @pytest.mark.asyncio
+    async def test_file_info_success(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://files/file_abc")
+        data = json.loads(result.contents[0].content)
+        assert data["file_id"] == "file_abc"
+        assert data["file_unique_id"] == "unique_abc"
+        assert data["file_size"] == 125432
+        assert data["file_path"] == "documents/file_42.pdf"
+
+    @pytest.mark.asyncio
+    async def test_file_info_invalid_id(self, mock_bot, mock_dp):
+        import json
+
+        from aiogram_mcp.resources import register_resources
+
+        mock_bot.get_file = AsyncMock(
+            side_effect=TelegramBadRequest(method=MagicMock(), message="invalid file_id")
+        )
+        fast_mcp = _make_fast_mcp()
+        tool_ctx = BotContext(bot=mock_bot, dp=mock_dp)
+        register_resources(fast_mcp, tool_ctx)
+
+        result = await fast_mcp.read_resource("telegram://files/invalid")
+        data = json.loads(result.contents[0].content)
+        assert data["ok"] is False
