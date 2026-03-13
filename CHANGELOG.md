@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0 (2026-03-12)
+
+### Added
+- Pydantic result models with `outputSchema` for all existing tools — AI clients can parse responses programmatically via `structuredContent`
+- 10 rich media tools: `send_document`, `send_voice`, `send_video`, `send_animation`, `send_audio`, `send_sticker`, `send_video_note`, `send_contact`, `send_location`, `send_poll`
+- File metadata resource `telegram://files/{file_id}` — retrieve file info without downloading
+- Base `ToolResponse` and `OkResult` models in `aiogram_mcp/models.py`
+- Shared `normalize_parse_mode` utility in `aiogram_mcp/utils.py`
+
+### Changed
+- All tool return types changed from `dict[str, Any]` to typed Pydantic models
+- `_normalize_parse_mode` moved from `tools/messaging.py` to `aiogram_mcp/utils.py` and renamed to `normalize_parse_mode`
+
+### Removed
+- `ToolResult` type alias removed from all tool modules
+
 ## 0.5.0 (2026-03-12)
 
 ### Added
