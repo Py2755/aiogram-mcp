@@ -3044,3 +3044,27 @@ class TestAuditLogger:
         entry = al.get_entries()[0]
         assert entry.ok is False
         assert entry.error == "not allowed"
+
+
+class TestBotContextPhase6:
+    def test_rate_limiter_default_none(self, mock_bot):
+        dp = MagicMock()
+        ctx = BotContext(bot=mock_bot, dp=dp)
+        assert ctx.rate_limiter is None
+
+    def test_rate_limiter_assigned(self, mock_bot):
+        dp = MagicMock()
+        rl = RateLimiter(rate=10)
+        ctx = BotContext(bot=mock_bot, dp=dp, rate_limiter=rl)
+        assert ctx.rate_limiter is rl
+
+    def test_audit_logger_default_none(self, mock_bot):
+        dp = MagicMock()
+        ctx = BotContext(bot=mock_bot, dp=dp)
+        assert ctx.audit_logger is None
+
+    def test_audit_logger_assigned(self, mock_bot):
+        dp = MagicMock()
+        al = AuditLogger(max_size=100)
+        ctx = BotContext(bot=mock_bot, dp=dp, audit_logger=al)
+        assert ctx.audit_logger is al
