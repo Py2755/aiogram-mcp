@@ -11,6 +11,12 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram_mcp.context import BotContext
 from aiogram_mcp.events import EventManager, Subscription
 from aiogram_mcp.middleware import MCPMiddleware
+from aiogram_mcp.permissions import (
+    PermissionLevel,
+    get_allowed_tools,
+    parse_permission_level,
+    TOOL_PERMISSIONS,
+)
 from aiogram_mcp.rate_limiter import RateLimiter
 from aiogram_mcp.server import AiogramMCP
 
@@ -2938,3 +2944,51 @@ class TestRateLimiter:
         # RateLimiter itself requires a positive rate.
         with pytest.raises(ValueError, match="rate must be positive"):
             RateLimiter(rate=0)
+
+
+class TestPermissions:
+    def test_parse_string_lowercase(self):
+        assert parse_permission_level("read") == PermissionLevel.READ
+
+    def test_parse_string_uppercase(self):
+        assert parse_permission_level("ADMIN") == PermissionLevel.ADMIN
+
+    def test_parse_string_mixed_case(self):
+        assert parse_permission_level("Messaging") == PermissionLevel.MESSAGING
+
+    def test_parse_enum_passthrough(self):
+        assert parse_permission_level(PermissionLevel.MODERATION) == PermissionLevel.MODERATION
+
+    def test_parse_invalid_raises(self):
+        with pytest.raises(ValueError, match="Invalid permission level"):
+            parse_permission_level("superadmin")
+
+    def test_read_level_tools(self):
+        tools = get_allowed_tools(PermissionLevel.READ)
+        assert "get_bot_info" in tools
+        assert "get_chat_info" in tools
+        assert "send_message" not in tools
+
+    def test_messaging_level_includes_read(self):
+        tools = get_allowed_tools(PermissionLevel.MESSAGING)
+        assert "get_bot_info" in tools  # from read
+        assert "send_message" in tools  # messaging
+        assert "send_document" in tools  # media
+        assert "ban_user" not in tools  # moderation
+
+    def test_moderation_level_includes_messaging(self):
+        tools = get_allowed_tools(PermissionLevel.MODERATION)
+        assert "send_message" in tools  # from messaging
+        assert "ban_user" in tools  # moderation
+        assert "broadcast" not in tools  # admin
+
+    def test_admin_level_includes_all(self):
+        tools = get_allowed_tools(PermissionLevel.ADMIN)
+        assert "broadcast" in tools
+        assert "subscribe_events" in tools
+        assert len(tools) == 30
+        assert len(tools) == len(TOOL_PERMISSIONS)
+
+    def test_all_tools_mapped(self):
+        admin_tools = get_allowed_tools(PermissionLevel.ADMIN)
+        assert admin_tools == set(TOOL_PERMISSIONS.keys())
