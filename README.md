@@ -13,9 +13,10 @@
 
 Most Telegram MCP servers are thin wrappers with 3-5 tools. `aiogram-mcp` goes further:
 
-- **21 tools** — messaging, moderation, interactive keyboards, event subscriptions, broadcasting
-- **5 resources** — bot info, config, chat lists, message history, event queue
+- **30 tools** — messaging, rich media, moderation, interactive keyboards, event subscriptions, broadcasting
+- **6 resources** — bot info, config, chat lists, message history, event queue, file metadata
 - **3 prompts** — ready-made moderation, announcement, and user report workflows
+- **Structured output** — every tool returns typed Pydantic models with `outputSchema` for programmatic parsing
 - **Real-time events** — the bot pushes Telegram events to AI clients via MCP notifications (no polling)
 - **Interactive messages** — AI agents create inline keyboard menus, handle button presses, edit messages
 - **Zero rewrite** — add 5 lines to your existing bot, keep all your handlers
@@ -142,6 +143,21 @@ Now Claude can send messages, read history, create button menus, and react to ev
 | `set_chat_title` | Change the chat title |
 | `set_chat_description` | Change the chat description |
 
+### Rich Media (10 tools)
+
+| Tool | Description |
+|------|-------------|
+| `send_document` | Send a file/document by URL with optional caption |
+| `send_voice` | Send a voice message by URL |
+| `send_video` | Send a video by URL with optional caption |
+| `send_animation` | Send a GIF/animation by URL |
+| `send_audio` | Send audio/music by URL with performer and title |
+| `send_sticker` | Send a sticker by file_id or URL |
+| `send_video_note` | Send a round video note by URL |
+| `send_contact` | Send a contact with phone number and name |
+| `send_location` | Send a geolocation pin |
+| `send_poll` | Create a poll with multiple options |
+
 ### Events (2 tools)
 
 | Tool | Description |
@@ -166,6 +182,7 @@ Read-only data that AI agents can access without calling tools:
 | `telegram://chats` | List of active chats with metadata |
 | `telegram://chats/{chat_id}/history` | Last 50 messages in a chat |
 | `telegram://events/queue` | Event queue with auto-incrementing IDs |
+| `telegram://files/{file_id}` | File metadata (size, path, unique ID) |
 
 ## MCP Prompts
 
@@ -246,7 +263,7 @@ git clone https://github.com/Py2755/aiogram-mcp.git
 cd aiogram-mcp
 pip install -e ".[dev]"
 
-pytest -v          # 150 tests
+pytest -v          # 184 tests
 ruff check aiogram_mcp tests examples
 mypy aiogram_mcp   # strict mode
 ```
