@@ -11,6 +11,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram_mcp.context import BotContext
 from aiogram_mcp.events import EventManager, Subscription
 from aiogram_mcp.middleware import MCPMiddleware
+from aiogram_mcp.rate_limiter import RateLimiter
 from aiogram_mcp.server import AiogramMCP
 
 
@@ -2888,3 +2889,52 @@ class TestResourceFileInfo:
         result = await fast_mcp.read_resource("telegram://files/invalid")
         data = json.loads(result.contents[0].content)
         assert data["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# RateLimiter
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiter:
+    @pytest.mark.asyncio
+    async def test_acquire_immediate_when_tokens_available(self):
+        rl = RateLimiter(rate=10)
+        # Should return immediately — tokens are available
+        await asyncio.wait_for(rl.acquire(), timeout=0.1)
+
+    @pytest.mark.asyncio
+    async def test_acquire_waits_when_no_tokens(self):
+        rl = RateLimiter(rate=2)
+        # Consume all tokens
+        await rl.acquire()
+        await rl.acquire()
+        # Third acquire should wait ~0.5s (1/rate)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(rl.acquire(), timeout=0.1)
+
+    @pytest.mark.asyncio
+    async def test_acquire_resumes_after_refill(self):
+        rl = RateLimiter(rate=10)
+        # Consume all tokens
+        for _ in range(10):
+            await rl.acquire()
+        # Wait for refill — at rate=10, one token refills in 0.1s
+        await asyncio.wait_for(rl.acquire(), timeout=1.0)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_acquires_queued(self):
+        rl = RateLimiter(rate=5)
+        # Consume all tokens
+        for _ in range(5):
+            await rl.acquire()
+        # Launch 3 concurrent acquires — all should eventually succeed
+        tasks = [asyncio.create_task(rl.acquire()) for _ in range(3)]
+        done, _ = await asyncio.wait(tasks, timeout=2.0)
+        assert len(done) == 3
+
+    def test_rate_zero_raises(self):
+        # rate=0 disabling is handled at server level (no RateLimiter created).
+        # RateLimiter itself requires a positive rate.
+        with pytest.raises(ValueError, match="rate must be positive"):
+            RateLimiter(rate=0)
