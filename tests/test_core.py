@@ -17,6 +17,7 @@ from aiogram_mcp.permissions import (
     parse_permission_level,
     TOOL_PERMISSIONS,
 )
+from aiogram_mcp.audit import AuditEntry, AuditLogger
 from aiogram_mcp.rate_limiter import RateLimiter
 from aiogram_mcp.server import AiogramMCP
 
@@ -2992,3 +2993,54 @@ class TestPermissions:
     def test_all_tools_mapped(self):
         admin_tools = get_allowed_tools(PermissionLevel.ADMIN)
         assert admin_tools == set(TOOL_PERMISSIONS.keys())
+
+
+class TestAuditLogger:
+    def test_log_creates_entry(self):
+        al = AuditLogger(max_size=100)
+        al.log("send_message", {"chat_id": 123, "text": "hi"}, ok=True)
+        entries = al.get_entries()
+        assert len(entries) == 1
+        assert entries[0].tool == "send_message"
+        assert entries[0].ok is True
+
+    def test_auto_increment_ids(self):
+        al = AuditLogger(max_size=100)
+        al.log("tool_a", {}, ok=True)
+        al.log("tool_b", {}, ok=False, error="fail")
+        entries = al.get_entries()
+        assert entries[0].id == 1
+        assert entries[1].id == 2
+
+    def test_timestamp_is_utc_datetime(self):
+        from datetime import timezone
+        al = AuditLogger(max_size=100)
+        al.log("tool_a", {}, ok=True)
+        entry = al.get_entries()[0]
+        assert entry.timestamp.tzinfo == timezone.utc
+
+    def test_get_entries_since_id(self):
+        al = AuditLogger(max_size=100)
+        al.log("a", {}, ok=True)
+        al.log("b", {}, ok=True)
+        al.log("c", {}, ok=True)
+        entries = al.get_entries(since_id=1)
+        assert len(entries) == 2
+        assert entries[0].tool == "b"
+
+    def test_max_size_evicts_oldest(self):
+        al = AuditLogger(max_size=2)
+        al.log("a", {}, ok=True)
+        al.log("b", {}, ok=True)
+        al.log("c", {}, ok=True)
+        entries = al.get_entries()
+        assert len(entries) == 2
+        assert entries[0].tool == "b"
+        assert entries[1].tool == "c"
+
+    def test_error_field_stored(self):
+        al = AuditLogger(max_size=100)
+        al.log("fail_tool", {"chat_id": 1}, ok=False, error="not allowed")
+        entry = al.get_entries()[0]
+        assert entry.ok is False
+        assert entry.error == "not allowed"
