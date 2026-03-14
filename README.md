@@ -14,11 +14,14 @@
 Most Telegram MCP servers are thin wrappers with 3-5 tools. `aiogram-mcp` goes further:
 
 - **30 tools** — messaging, rich media, moderation, interactive keyboards, event subscriptions, broadcasting
-- **6 resources** — bot info, config, chat lists, message history, event queue, file metadata
+- **7 resources** — bot info, config, chat lists, message history, event queue, file metadata, audit log
 - **3 prompts** — ready-made moderation, announcement, and user report workflows
 - **Structured output** — every tool returns typed Pydantic models with `outputSchema` for programmatic parsing
 - **Real-time events** — the bot pushes Telegram events to AI clients via MCP notifications (no polling)
 - **Interactive messages** — AI agents create inline keyboard menus, handle button presses, edit messages
+- **Rate limiting** — built-in token bucket prevents Telegram 429 errors
+- **Permission levels** — restrict AI agents to read-only, messaging, moderation, or full admin access
+- **Audit logging** — track every tool invocation with timestamps and arguments
 - **Zero rewrite** — add 5 lines to your existing bot, keep all your handlers
 
 ## How It Works
@@ -183,6 +186,7 @@ Read-only data that AI agents can access without calling tools:
 | `telegram://chats/{chat_id}/history` | Last 50 messages in a chat |
 | `telegram://events/queue` | Event queue with auto-incrementing IDs |
 | `telegram://files/{file_id}` | File metadata (size, path, unique ID) |
+| `telegram://audit/log` | Audit log of tool invocations (opt-in) |
 
 ## MCP Prompts
 
@@ -249,6 +253,47 @@ mcp = AiogramMCP(
 - **`enable_broadcast`** — broadcast tool is disabled by default as a safety measure.
 - **`max_broadcast_recipients`** — caps the number of chats in a single broadcast.
 
+## Advanced Configuration
+
+### Rate Limiting
+
+```python
+mcp = AiogramMCP(
+    bot=bot, dp=dp,
+    rate_limit=30,  # requests/sec (default), 0 to disable
+)
+```
+
+Built-in token bucket rate limiter prevents Telegram 429 errors. All outgoing API calls are automatically paced.
+
+### Permission Levels
+
+```python
+mcp = AiogramMCP(
+    bot=bot, dp=dp,
+    permission_level="messaging",  # read + messaging tools only
+)
+```
+
+| Level | Access |
+|-------|--------|
+| `read` | Bot info, chat info, user profiles |
+| `messaging` | Read + send messages, photos, media, interactive messages |
+| `moderation` | Messaging + delete, pin, ban, unban, chat settings |
+| `admin` | Full access including broadcast and event subscriptions |
+
+### Audit Log
+
+```python
+mcp = AiogramMCP(
+    bot=bot, dp=dp,
+    enable_audit=True,
+    audit_log_size=1000,
+)
+```
+
+Every tool invocation is logged. Access via `telegram://audit/log` resource.
+
 ## Examples
 
 | Example | Transport | Features |
@@ -263,7 +308,7 @@ git clone https://github.com/Py2755/aiogram-mcp.git
 cd aiogram-mcp
 pip install -e ".[dev]"
 
-pytest -v          # 184 tests
+pytest -v          # ~228 tests
 ruff check aiogram_mcp tests examples
 mypy aiogram_mcp   # strict mode
 ```
