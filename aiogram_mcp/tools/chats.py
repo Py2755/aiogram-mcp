@@ -48,6 +48,8 @@ def register_chat_tools(
         async def get_chat_info(chat_id: int) -> ChatInfoResult:
             """Get details about a chat."""
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 chat = await ctx.bot.get_chat(chat_id)
                 member_count = None
                 try:
@@ -55,7 +57,7 @@ def register_chat_tools(
                 except (TelegramBadRequest, TelegramForbiddenError):
                     member_count = None
 
-                return ChatInfoResult(
+                result = ChatInfoResult(
                     ok=True,
                     id=chat.id,
                     type=getattr(chat.type, "value", str(chat.type)),
@@ -66,7 +68,13 @@ def register_chat_tools(
                     is_forum=getattr(chat, "is_forum", False),
                 )
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return ChatInfoResult(ok=False, error=str(exc))
+                result = ChatInfoResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "get_chat_info", {"chat_id": chat_id}, result.ok, result.error
+                )
+            return result
 
     if allowed_tools is None or "get_chat_members_count" in allowed_tools:
 
@@ -74,10 +82,21 @@ def register_chat_tools(
         async def get_chat_members_count(chat_id: int) -> ChatMembersCountResult:
             """Get the number of members in a chat."""
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 count = await ctx.bot.get_chat_member_count(chat_id=chat_id)
-                return ChatMembersCountResult(ok=True, count=count)
+                result = ChatMembersCountResult(ok=True, count=count)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return ChatMembersCountResult(ok=False, error=str(exc))
+                result = ChatMembersCountResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "get_chat_members_count",
+                    {"chat_id": chat_id},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "ban_user" in allowed_tools:
 
@@ -90,27 +109,46 @@ def register_chat_tools(
         ) -> BanUserResult:
             """Ban a user from a chat."""
             if not ctx.is_chat_allowed(chat_id):
-                return BanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = BanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "ban_user",
+                        {"chat_id": chat_id, "user_id": user_id},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             until_date = None
             if ban_duration_hours:
                 until_date = datetime.now(timezone.utc) + timedelta(hours=ban_duration_hours)
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.ban_chat_member(
                     chat_id=chat_id,
                     user_id=user_id,
                     until_date=until_date,
                     revoke_messages=revoke_messages,
                 )
-                return BanUserResult(
+                result = BanUserResult(
                     ok=True,
                     user_id=user_id,
                     permanent=until_date is None,
                     until=until_date.isoformat() if until_date else None,
                 )
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return BanUserResult(ok=False, error=str(exc))
+                result = BanUserResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "ban_user",
+                    {"chat_id": chat_id, "user_id": user_id},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "unban_user" in allowed_tools:
 
@@ -122,17 +160,36 @@ def register_chat_tools(
         ) -> UnbanUserResult:
             """Unban a previously banned user."""
             if not ctx.is_chat_allowed(chat_id):
-                return UnbanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = UnbanUserResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "unban_user",
+                        {"chat_id": chat_id, "user_id": user_id},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.unban_chat_member(
                     chat_id=chat_id,
                     user_id=user_id,
                     only_if_banned=only_if_banned,
                 )
-                return UnbanUserResult(ok=True, user_id=user_id)
+                result = UnbanUserResult(ok=True, user_id=user_id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return UnbanUserResult(ok=False, error=str(exc))
+                result = UnbanUserResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "unban_user",
+                    {"chat_id": chat_id, "user_id": user_id},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "set_chat_title" in allowed_tools:
 
@@ -140,13 +197,32 @@ def register_chat_tools(
         async def set_chat_title(chat_id: int, title: str) -> SetChatTitleResult:
             """Change the title of a group or channel."""
             if not ctx.is_chat_allowed(chat_id):
-                return SetChatTitleResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SetChatTitleResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "set_chat_title",
+                        {"chat_id": chat_id, "title": title},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.set_chat_title(chat_id=chat_id, title=title)
-                return SetChatTitleResult(ok=True, new_title=title)
+                result = SetChatTitleResult(ok=True, new_title=title)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SetChatTitleResult(ok=False, error=str(exc))
+                result = SetChatTitleResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "set_chat_title",
+                    {"chat_id": chat_id, "title": title},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "set_chat_description" in allowed_tools:
 
@@ -154,10 +230,29 @@ def register_chat_tools(
         async def set_chat_description(chat_id: int, description: str) -> OkResult:
             """Change the description of a group or channel."""
             if not ctx.is_chat_allowed(chat_id):
-                return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "set_chat_description",
+                        {"chat_id": chat_id, "description": description},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.set_chat_description(chat_id=chat_id, description=description)
-                return OkResult(ok=True)
+                result = OkResult(ok=True)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return OkResult(ok=False, error=str(exc))
+                result = OkResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "set_chat_description",
+                    {"chat_id": chat_id, "description": description},
+                    result.ok,
+                    result.error,
+                )
+            return result

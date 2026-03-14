@@ -79,16 +79,34 @@ def register_interactive_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendInteractiveResult(
+                result = SendInteractiveResult(
                     ok=False,
                     error=f"Chat {chat_id} is not in allowed_chat_ids.",
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_interactive_message",
+                        {"chat_id": chat_id, "text": text},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             keyboard = _build_keyboard(buttons)
             if isinstance(keyboard, str):
-                return SendInteractiveResult(ok=False, error=keyboard)
+                result = SendInteractiveResult(ok=False, error=keyboard)
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_interactive_message",
+                        {"chat_id": chat_id, "text": text},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_message(
                     chat_id=chat_id,
                     text=text,
@@ -96,16 +114,25 @@ def register_interactive_tools(
                     reply_markup=keyboard,
                     disable_notification=disable_notification,
                 )
-                return SendInteractiveResult(
+                result = SendInteractiveResult(
                     ok=True,
                     message_id=msg.message_id,
                     chat_id=msg.chat.id,
                     date=msg.date.isoformat(),
                 )
             except ValueError as exc:
-                return SendInteractiveResult(ok=False, error=str(exc))
+                result = SendInteractiveResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendInteractiveResult(ok=False, error=str(exc))
+                result = SendInteractiveResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_interactive_message",
+                    {"chat_id": chat_id, "text": text},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "edit_message" in allowed_tools:
 
@@ -127,37 +154,65 @@ def register_interactive_tools(
                 parse_mode: HTML, Markdown, MarkdownV2, or None.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return EditMessageResult(
+                result = EditMessageResult(
                     ok=False,
                     error=f"Chat {chat_id} is not in allowed_chat_ids.",
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "edit_message",
+                        {"chat_id": chat_id, "message_id": message_id, "text": text},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             reply_markup = None
             if buttons is not None:
                 keyboard = _build_keyboard(buttons)
                 if isinstance(keyboard, str):
-                    return EditMessageResult(ok=False, error=keyboard)
+                    result = EditMessageResult(ok=False, error=keyboard)
+                    if ctx.audit_logger:
+                        ctx.audit_logger.log(
+                            "edit_message",
+                            {"chat_id": chat_id, "message_id": message_id, "text": text},
+                            result.ok,
+                            result.error,
+                        )
+                    return result
                 reply_markup = keyboard
 
             try:
-                result = await ctx.bot.edit_message_text(
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
+                api_result = await ctx.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
                     text=text,
                     parse_mode=normalize_parse_mode(parse_mode),
                     reply_markup=reply_markup,
                 )
-                if isinstance(result, bool):
-                    return EditMessageResult(ok=True, message_id=message_id, chat_id=chat_id)
-                return EditMessageResult(
-                    ok=True,
-                    message_id=result.message_id,
-                    chat_id=result.chat.id,
-                )
+                if isinstance(api_result, bool):
+                    result = EditMessageResult(ok=True, message_id=message_id, chat_id=chat_id)
+                else:
+                    result = EditMessageResult(
+                        ok=True,
+                        message_id=api_result.message_id,
+                        chat_id=api_result.chat.id,
+                    )
             except ValueError as exc:
-                return EditMessageResult(ok=False, error=str(exc))
+                result = EditMessageResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return EditMessageResult(ok=False, error=str(exc))
+                result = EditMessageResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "edit_message",
+                    {"chat_id": chat_id, "message_id": message_id, "text": text},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "answer_callback_query" in allowed_tools:
 
@@ -175,11 +230,22 @@ def register_interactive_tools(
                 show_alert: Show as alert popup instead of toast notification.
             """
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.answer_callback_query(
                     callback_query_id=callback_query_id,
                     text=text,
                     show_alert=show_alert,
                 )
-                return AnswerCallbackResult(ok=True, callback_query_id=callback_query_id)
+                result = AnswerCallbackResult(ok=True, callback_query_id=callback_query_id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return AnswerCallbackResult(ok=False, error=str(exc))
+                result = AnswerCallbackResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "answer_callback_query",
+                    {"callback_query_id": callback_query_id},
+                    result.ok,
+                    result.error,
+                )
+            return result

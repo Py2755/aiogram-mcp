@@ -47,7 +47,7 @@ def register_user_tools(
         async def get_bot_info() -> BotInfoResult:
             """Return metadata about the current Telegram bot."""
             me = await ctx.bot.get_me()
-            return BotInfoResult(
+            result = BotInfoResult(
                 ok=True,
                 id=me.id,
                 username=me.username,
@@ -57,6 +57,9 @@ def register_user_tools(
                 can_read_all_group_messages=me.can_read_all_group_messages,
                 supports_inline_queries=me.supports_inline_queries,
             )
+            if ctx.audit_logger:
+                ctx.audit_logger.log("get_bot_info", {}, result.ok, result.error)
+            return result
 
     if allowed_tools is None or "get_chat_member_info" in allowed_tools:
 
@@ -64,28 +67,46 @@ def register_user_tools(
         async def get_chat_member_info(chat_id: int, user_id: int) -> ChatMemberInfoResult:
             """Return role and user info for a chat member."""
             if not ctx.is_chat_allowed(chat_id):
-                return ChatMemberInfoResult(
+                result = ChatMemberInfoResult(
                     ok=False, error=f"Chat {chat_id} is not allowed."
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "get_chat_member_info",
+                        {"chat_id": chat_id, "user_id": user_id},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 member = await ctx.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+                user = member.user
+                status = member.status.value if hasattr(member.status, "value") else str(member.status)
+                result = ChatMemberInfoResult(
+                    ok=True,
+                    chat_id=chat_id,
+                    user_id=user.id,
+                    status=status,
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    language_code=user.language_code,
+                    is_bot=user.is_bot,
+                )
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return ChatMemberInfoResult(ok=False, error=str(exc))
+                result = ChatMemberInfoResult(ok=False, error=str(exc))
 
-            user = member.user
-            status = member.status.value if hasattr(member.status, "value") else str(member.status)
-            return ChatMemberInfoResult(
-                ok=True,
-                chat_id=chat_id,
-                user_id=user.id,
-                status=status,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                language_code=user.language_code,
-                is_bot=user.is_bot,
-            )
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "get_chat_member_info",
+                    {"chat_id": chat_id, "user_id": user_id},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "get_user_profile_photos" in allowed_tools:
 
@@ -95,30 +116,48 @@ def register_user_tools(
         ) -> UserProfilePhotosResult:
             """Return a lightweight list of Telegram profile photo file IDs."""
             if limit < 1 or limit > 100:
-                return UserProfilePhotosResult(
+                result = UserProfilePhotosResult(
                     ok=False, error="limit must be between 1 and 100."
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "get_user_profile_photos",
+                        {"user_id": user_id, "limit": limit},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 photos = await ctx.bot.get_user_profile_photos(user_id=user_id, limit=limit)
+                result = UserProfilePhotosResult(
+                    ok=True,
+                    user_id=user_id,
+                    total_count=photos.total_count,
+                    photos=[
+                        [
+                            {
+                                "file_id": size.file_id,
+                                "file_unique_id": size.file_unique_id,
+                                "width": size.width,
+                                "height": size.height,
+                                "file_size": size.file_size,
+                            }
+                            for size in group
+                        ]
+                        for group in photos.photos
+                    ],
+                )
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return UserProfilePhotosResult(ok=False, error=str(exc))
+                result = UserProfilePhotosResult(ok=False, error=str(exc))
 
-            return UserProfilePhotosResult(
-                ok=True,
-                user_id=user_id,
-                total_count=photos.total_count,
-                photos=[
-                    [
-                        {
-                            "file_id": size.file_id,
-                            "file_unique_id": size.file_unique_id,
-                            "width": size.width,
-                            "height": size.height,
-                            "file_size": size.file_size,
-                        }
-                        for size in group
-                    ]
-                    for group in photos.photos
-                ],
-            )
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "get_user_profile_photos",
+                    {"user_id": user_id, "limit": limit},
+                    result.ok,
+                    result.error,
+                )
+            return result

@@ -45,8 +45,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_document",
+                        {"chat_id": chat_id, "document_url": document_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_document(
                     chat_id=chat_id,
                     document=document_url,
@@ -54,11 +65,20 @@ def register_media_tools(
                     parse_mode=normalize_parse_mode(parse_mode),
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_document",
+                    {"chat_id": chat_id, "document_url": document_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_voice" in allowed_tools:
 
@@ -82,8 +102,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_voice",
+                        {"chat_id": chat_id, "voice_url": voice_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_voice(
                     chat_id=chat_id,
                     voice=voice_url,
@@ -92,11 +123,20 @@ def register_media_tools(
                     duration=duration,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_voice",
+                    {"chat_id": chat_id, "voice_url": voice_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_video" in allowed_tools:
 
@@ -120,8 +160,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_video",
+                        {"chat_id": chat_id, "video_url": video_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_video(
                     chat_id=chat_id,
                     video=video_url,
@@ -130,11 +181,20 @@ def register_media_tools(
                     duration=duration,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_video",
+                    {"chat_id": chat_id, "video_url": video_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_animation" in allowed_tools:
 
@@ -156,8 +216,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_animation",
+                        {"chat_id": chat_id, "animation_url": animation_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_animation(
                     chat_id=chat_id,
                     animation=animation_url,
@@ -165,11 +236,20 @@ def register_media_tools(
                     parse_mode=normalize_parse_mode(parse_mode),
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_animation",
+                    {"chat_id": chat_id, "animation_url": animation_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_audio" in allowed_tools:
 
@@ -195,8 +275,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_audio",
+                        {"chat_id": chat_id, "audio_url": audio_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_audio(
                     chat_id=chat_id,
                     audio=audio_url,
@@ -206,11 +297,20 @@ def register_media_tools(
                     title=title,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_audio",
+                    {"chat_id": chat_id, "audio_url": audio_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_sticker" in allowed_tools:
 
@@ -228,16 +328,36 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_sticker",
+                        {"chat_id": chat_id, "sticker": sticker},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_sticker(
                     chat_id=chat_id,
                     sticker=sticker,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_sticker",
+                    {"chat_id": chat_id, "sticker": sticker},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_video_note" in allowed_tools:
 
@@ -259,8 +379,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_video_note",
+                        {"chat_id": chat_id, "video_note_url": video_note_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_video_note(
                     chat_id=chat_id,
                     video_note=video_note_url,
@@ -268,9 +399,18 @@ def register_media_tools(
                     length=length,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_video_note",
+                    {"chat_id": chat_id, "video_note_url": video_note_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_contact" in allowed_tools:
 
@@ -292,8 +432,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_contact",
+                        {"chat_id": chat_id, "phone_number": phone_number},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_contact(
                     chat_id=chat_id,
                     phone_number=phone_number,
@@ -301,9 +452,18 @@ def register_media_tools(
                     last_name=last_name,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_contact",
+                    {"chat_id": chat_id, "phone_number": phone_number},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_location" in allowed_tools:
 
@@ -323,17 +483,37 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendMediaResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_location",
+                        {"chat_id": chat_id, "latitude": latitude, "longitude": longitude},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_location(
                     chat_id=chat_id,
                     latitude=latitude,
                     longitude=longitude,
                     disable_notification=disable_notification,
                 )
-                return SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendMediaResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendMediaResult(ok=False, error=str(exc))
+                result = SendMediaResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_location",
+                    {"chat_id": chat_id, "latitude": latitude, "longitude": longitude},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "send_poll" in allowed_tools:
 
@@ -359,8 +539,19 @@ def register_media_tools(
                 disable_notification: Send silently.
             """
             if not ctx.is_chat_allowed(chat_id):
-                return SendPollResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendPollResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_poll",
+                        {"chat_id": chat_id, "question": question},
+                        result.ok,
+                        result.error,
+                    )
+                return result
+
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 poll_options: list[InputPollOption | str] = [InputPollOption(text=opt) for opt in options]
                 msg = await ctx.bot.send_poll(
                     chat_id=chat_id,
@@ -371,11 +562,20 @@ def register_media_tools(
                     allows_multiple_answers=allows_multiple_answers,
                     disable_notification=disable_notification,
                 )
-                return SendPollResult(
+                result = SendPollResult(
                     ok=True,
                     message_id=msg.message_id,
                     chat_id=msg.chat.id,
                     poll_id=msg.poll.id if msg.poll else None,
                 )
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendPollResult(ok=False, error=str(exc))
+                result = SendPollResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_poll",
+                    {"chat_id": chat_id, "question": question},
+                    result.ok,
+                    result.error,
+                )
+            return result
