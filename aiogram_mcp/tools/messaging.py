@@ -41,12 +41,19 @@ def register_messaging_tools(
         ) -> SendMessageResult:
             """Send a text message to a Telegram chat or user."""
             if not ctx.is_chat_allowed(chat_id):
-                return SendMessageResult(
+                result = SendMessageResult(
                     ok=False,
                     error=f"Chat {chat_id} is not in the allowed_chat_ids whitelist.",
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_message", {"chat_id": chat_id, "text": text}, result.ok, result.error
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_message(
                     chat_id=chat_id,
                     text=text,
@@ -58,20 +65,26 @@ def register_messaging_tools(
                         else None
                     ),
                 )
-                return SendMessageResult(
+                result = SendMessageResult(
                     ok=True,
                     message_id=msg.message_id,
                     chat_id=msg.chat.id,
                     date=msg.date.isoformat(),
                 )
             except ValueError as exc:
-                return SendMessageResult(ok=False, error=str(exc))
+                result = SendMessageResult(ok=False, error=str(exc))
             except TelegramForbiddenError:
-                return SendMessageResult(
+                result = SendMessageResult(
                     ok=False, error="Bot was blocked by the user or lacks permission."
                 )
             except TelegramBadRequest as exc:
-                return SendMessageResult(ok=False, error=str(exc))
+                result = SendMessageResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_message", {"chat_id": chat_id, "text": text}, result.ok, result.error
+                )
+            return result
 
     if allowed_tools is None or "send_photo" in allowed_tools:
 
@@ -85,9 +98,19 @@ def register_messaging_tools(
         ) -> SendPhotoResult:
             """Send a photo to a Telegram chat."""
             if not ctx.is_chat_allowed(chat_id):
-                return SendPhotoResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = SendPhotoResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "send_photo",
+                        {"chat_id": chat_id, "photo_url": photo_url},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.send_photo(
                     chat_id=chat_id,
                     photo=photo_url,
@@ -95,11 +118,20 @@ def register_messaging_tools(
                     parse_mode=normalize_parse_mode(parse_mode),
                     disable_notification=disable_notification,
                 )
-                return SendPhotoResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+                result = SendPhotoResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
             except ValueError as exc:
-                return SendPhotoResult(ok=False, error=str(exc))
+                result = SendPhotoResult(ok=False, error=str(exc))
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return SendPhotoResult(ok=False, error=str(exc))
+                result = SendPhotoResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "send_photo",
+                    {"chat_id": chat_id, "photo_url": photo_url},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "forward_message" in allowed_tools:
 
@@ -112,20 +144,47 @@ def register_messaging_tools(
         ) -> ForwardMessageResult:
             """Forward an existing message from one chat to another."""
             if not ctx.is_chat_allowed(to_chat_id):
-                return ForwardMessageResult(
+                result = ForwardMessageResult(
                     ok=False, error=f"Chat {to_chat_id} is not allowed."
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "forward_message",
+                        {
+                            "to_chat_id": to_chat_id,
+                            "from_chat_id": from_chat_id,
+                            "message_id": message_id,
+                        },
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 msg = await ctx.bot.forward_message(
                     chat_id=to_chat_id,
                     from_chat_id=from_chat_id,
                     message_id=message_id,
                     disable_notification=disable_notification,
                 )
-                return ForwardMessageResult(ok=True, message_id=msg.message_id)
+                result = ForwardMessageResult(ok=True, message_id=msg.message_id)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return ForwardMessageResult(ok=False, error=str(exc))
+                result = ForwardMessageResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "forward_message",
+                    {
+                        "to_chat_id": to_chat_id,
+                        "from_chat_id": from_chat_id,
+                        "message_id": message_id,
+                    },
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "delete_message" in allowed_tools:
 
@@ -133,13 +192,32 @@ def register_messaging_tools(
         async def delete_message(chat_id: int, message_id: int) -> OkResult:
             """Delete a message from a chat."""
             if not ctx.is_chat_allowed(chat_id):
-                return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "delete_message",
+                        {"chat_id": chat_id, "message_id": message_id},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                return OkResult(ok=True)
+                result = OkResult(ok=True)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return OkResult(ok=False, error=str(exc))
+                result = OkResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "delete_message",
+                    {"chat_id": chat_id, "message_id": message_id},
+                    result.ok,
+                    result.error,
+                )
+            return result
 
     if allowed_tools is None or "pin_message" in allowed_tools:
 
@@ -151,14 +229,33 @@ def register_messaging_tools(
         ) -> OkResult:
             """Pin a message in a chat."""
             if not ctx.is_chat_allowed(chat_id):
-                return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                result = OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+                if ctx.audit_logger:
+                    ctx.audit_logger.log(
+                        "pin_message",
+                        {"chat_id": chat_id, "message_id": message_id},
+                        result.ok,
+                        result.error,
+                    )
+                return result
 
             try:
+                if ctx.rate_limiter:
+                    await ctx.rate_limiter.acquire()
                 await ctx.bot.pin_chat_message(
                     chat_id=chat_id,
                     message_id=message_id,
                     disable_notification=disable_notification,
                 )
-                return OkResult(ok=True)
+                result = OkResult(ok=True)
             except (TelegramBadRequest, TelegramForbiddenError) as exc:
-                return OkResult(ok=False, error=str(exc))
+                result = OkResult(ok=False, error=str(exc))
+
+            if ctx.audit_logger:
+                ctx.audit_logger.log(
+                    "pin_message",
+                    {"chat_id": chat_id, "message_id": message_id},
+                    result.ok,
+                    result.error,
+                )
+            return result

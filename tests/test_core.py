@@ -3172,3 +3172,67 @@ class TestResourceConfigPhase6:
         assert content["rate_limit"] == 15
         assert content["audit_enabled"] is True
         assert content["audit_log_size"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter integration (messaging tools)
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiterIntegration:
+    @pytest.mark.asyncio
+    async def test_send_message_calls_acquire(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp, rate_limit=30)
+        mcp_server._ctx.rate_limiter.acquire = AsyncMock()
+        await mcp_server.fastmcp.call_tool("send_message", {"chat_id": 111, "text": "hi"})
+        mcp_server._ctx.rate_limiter.acquire.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_send_message_skips_acquire_when_no_limiter(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp, rate_limit=0)
+        # Should work fine without rate limiter — no error
+        await mcp_server.fastmcp.call_tool("send_message", {"chat_id": 111, "text": "hi"})
+
+
+# ---------------------------------------------------------------------------
+# Audit log integration (messaging tools)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditLogIntegration:
+    @pytest.mark.asyncio
+    async def test_send_message_logs_success(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp, enable_audit=True)
+        await mcp_server.fastmcp.call_tool("send_message", {"chat_id": 111, "text": "hi"})
+        entries = mcp_server._ctx.audit_logger.get_entries()
+        assert len(entries) == 1
+        assert entries[0].tool == "send_message"
+        assert entries[0].ok is True
+
+    @pytest.mark.asyncio
+    async def test_send_message_logs_failure(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(
+            bot=mock_bot, dp=dp, enable_audit=True, allowed_chat_ids=[999]
+        )
+        await mcp_server.fastmcp.call_tool("send_message", {"chat_id": 111, "text": "hi"})
+        entries = mcp_server._ctx.audit_logger.get_entries()
+        assert len(entries) == 1
+        assert entries[0].ok is False
+
+    @pytest.mark.asyncio
+    async def test_rate_limiter_plus_audit(self, mock_bot):
+        """Cross-subsystem: tool call with both rate limiter and audit enabled."""
+        dp = MagicMock()
+        mcp_server = AiogramMCP(
+            bot=mock_bot, dp=dp, rate_limit=30, enable_audit=True
+        )
+        mcp_server._ctx.rate_limiter.acquire = AsyncMock()
+        await mcp_server.fastmcp.call_tool("send_message", {"chat_id": 111, "text": "hi"})
+        mcp_server._ctx.rate_limiter.acquire.assert_awaited_once()
+        entries = mcp_server._ctx.audit_logger.get_entries()
+        assert len(entries) == 1
+        assert entries[0].ok is True
