@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
+from .audit import AuditLogger
 from .context import BotContext
 from .events import EventManager
 from .middleware import MCPMiddleware
+from .permissions import PermissionLevel
+from .rate_limiter import RateLimiter
 from .server import AiogramMCP
 
 try:
@@ -14,4 +17,13 @@ try:
 except PackageNotFoundError:
     __version__ = "0.6.0"
 
-__all__ = ["AiogramMCP", "BotContext", "EventManager", "MCPMiddleware", "__version__"]
+__all__ = [
+    "AiogramMCP",
+    "AuditLogger",
+    "BotContext",
+    "EventManager",
+    "MCPMiddleware",
+    "PermissionLevel",
+    "RateLimiter",
+    "__version__",
+]
