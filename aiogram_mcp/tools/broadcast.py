@@ -50,8 +50,10 @@ def register_broadcast_tools(
             dry_run: bool = True,
         ) -> BroadcastResult:
             """Send a message to multiple users or chats."""
+            audit_args = {"chat_ids": chat_ids, "dry_run": dry_run}
+
             if len(chat_ids) > max_recipients:
-                return BroadcastResult(
+                result = BroadcastResult(
                     ok=False,
                     error=(
                         f"Recipient count {len(chat_ids)} exceeds safety limit "
@@ -59,17 +61,23 @@ def register_broadcast_tools(
                         "AiogramMCP to increase this limit."
                     ),
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log("broadcast", audit_args, result.ok, result.error)
+                return result
 
             if ctx.allowed_chat_ids is not None:
                 blocked = [chat_id for chat_id in chat_ids if not ctx.is_chat_allowed(chat_id)]
                 if blocked:
-                    return BroadcastResult(
+                    result = BroadcastResult(
                         ok=False,
                         error=f"These chat IDs are not in allowed_chat_ids: {blocked}",
                     )
+                    if ctx.audit_logger:
+                        ctx.audit_logger.log("broadcast", audit_args, result.ok, result.error)
+                    return result
 
             if dry_run:
-                return BroadcastResult(
+                result = BroadcastResult(
                     ok=True,
                     dry_run=True,
                     would_send_to=len(chat_ids),
@@ -77,11 +85,17 @@ def register_broadcast_tools(
                     message_preview=text[:200],
                     note="Set dry_run=False to actually send.",
                 )
+                if ctx.audit_logger:
+                    ctx.audit_logger.log("broadcast", audit_args, result.ok, result.error)
+                return result
 
             try:
                 normalized_parse_mode = normalize_parse_mode(parse_mode)
             except ValueError as exc:
-                return BroadcastResult(ok=False, error=str(exc))
+                result = BroadcastResult(ok=False, error=str(exc))
+                if ctx.audit_logger:
+                    ctx.audit_logger.log("broadcast", audit_args, result.ok, result.error)
+                return result
 
             results: list[BroadcastRecipientResult] = []
             success = 0
@@ -89,6 +103,8 @@ def register_broadcast_tools(
 
             for chat_id in chat_ids:
                 try:
+                    if ctx.rate_limiter:
+                        await ctx.rate_limiter.acquire()
                     await ctx.bot.send_message(
                         chat_id=chat_id,
                         text=text,
@@ -107,14 +123,18 @@ def register_broadcast_tools(
                     )
                     failed += 1
 
-                await asyncio.sleep(delay_seconds)
+                if not ctx.rate_limiter:
+                    await asyncio.sleep(delay_seconds)
 
             logger.info("Broadcast complete: %d success, %d failed", success, failed)
 
-            return BroadcastResult(
+            result = BroadcastResult(
                 ok=True,
                 dry_run=False,
                 success_count=success,
                 failed_count=failed,
                 results=results,
             )
+            if ctx.audit_logger:
+                ctx.audit_logger.log("broadcast", audit_args, result.ok, result.error)
+            return result

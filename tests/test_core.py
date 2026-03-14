@@ -3236,3 +3236,25 @@ class TestAuditLogIntegration:
         entries = mcp_server._ctx.audit_logger.get_entries()
         assert len(entries) == 1
         assert entries[0].ok is True
+
+
+class TestBroadcastRateLimiter:
+    async def test_broadcast_uses_acquire_per_recipient(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(
+            bot=mock_bot,
+            dp=dp,
+            enable_broadcast=True,
+            rate_limit=30,
+        )
+        mcp_server._ctx.rate_limiter.acquire = AsyncMock()
+        await mcp_server.fastmcp.call_tool(
+            "broadcast",
+            {
+                "chat_ids": [111, 222, 333],
+                "text": "test",
+                "dry_run": False,
+            },
+        )
+        # acquire called once per recipient
+        assert mcp_server._ctx.rate_limiter.acquire.await_count == 3
