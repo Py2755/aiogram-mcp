@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 (2026-03-14)
+
+### Added
+- Dockerfile for containerized deployment and Glama listing
+- `server.json` for MCP Registry listing
+- MCP Registry badge in README
+
 ## 0.7.0 (2026-03-14)
 
 ### Added

@@ -4,6 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyPI version](https://img.shields.io/pypi/v/aiogram-mcp.svg)](https://pypi.org/project/aiogram-mcp/)
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/)
+
+<!-- mcp-name: io.github.Py2755/aiogram-mcp -->
 
 **Connect your Telegram bot to AI agents via the Model Context Protocol.**
 

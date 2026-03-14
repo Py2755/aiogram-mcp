@@ -15,7 +15,7 @@ from .server import AiogramMCP
 try:
     __version__ = version("aiogram-mcp")
 except PackageNotFoundError:
-    __version__ = "0.7.0"
+    __version__ = "0.7.1"
 
 __all__ = [
     "AiogramMCP",
