@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.0 (2026-03-14)
+
+### Added
+- Token bucket rate limiter — limits outgoing Telegram API calls to configurable requests/sec
+- Permission levels (read, messaging, moderation, admin) — control which tools AI agents can access
+- Audit log with MCP resource `telegram://audit/log` — track all tool invocations
+- `RateLimiter` class in `aiogram_mcp/rate_limiter.py`
+- `PermissionLevel` enum and helpers in `aiogram_mcp/permissions.py`
+- `AuditLogger` and `AuditEntry` in `aiogram_mcp/audit.py`
+
+### Changed
+- `AiogramMCP` accepts new parameters: `permission_level`, `rate_limit`, `enable_audit`, `audit_log_size`
+- `BotContext` extended with `rate_limiter` and `audit_logger` fields
+- `telegram://config` resource now includes permission_level, rate_limit, audit settings
+- All `register_*_tools()` functions accept `allowed_tools` parameter for permission filtering
+- Broadcast tool uses rate limiter instead of fixed `delay_seconds` sleep when rate limiter is active
+
 ## 0.6.0 (2026-03-12)
 
 ### Added
