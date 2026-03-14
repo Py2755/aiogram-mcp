@@ -12,7 +12,15 @@ from fastmcp import FastMCP
 from .context import BotContext
 
 
-def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
+def register_resources(
+    mcp: FastMCP,
+    ctx: BotContext,
+    *,
+    permission_level: str = "admin",
+    rate_limit: int = 30,
+    audit_enabled: bool = False,
+    audit_log_size: int = 500,
+) -> None:
     """Register all MCP resources on the FastMCP server."""
 
     @mcp.resource("telegram://bot/info")
@@ -35,6 +43,10 @@ def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
         return json.dumps({
             "server_name": mcp.name,
             "allowed_chat_ids": ctx.allowed_chat_ids,
+            "permission_level": permission_level,
+            "rate_limit": rate_limit,
+            "audit_enabled": audit_enabled,
+            "audit_log_size": audit_log_size,
         })
 
     @mcp.resource("telegram://chats")
@@ -122,3 +134,18 @@ def register_resources(mcp: FastMCP, ctx: BotContext) -> None:
             })
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
             return json.dumps({"ok": False, "error": str(exc)})
+
+    @mcp.resource("telegram://audit/log")
+    async def audit_log() -> str:
+        """Audit log of all MCP tool invocations."""
+        if ctx.audit_logger is None:
+            return json.dumps({
+                "entries": [],
+                "count": 0,
+                "note": "Audit logging is disabled.",
+            })
+        entries = ctx.audit_logger.get_entries()
+        return json.dumps({
+            "entries": [e.model_dump(mode="json") for e in entries],
+            "count": len(entries),
+        })

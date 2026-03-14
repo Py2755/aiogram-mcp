@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
+from aiogram_mcp.audit import AuditLogger
 from aiogram_mcp.context import BotContext
 from aiogram_mcp.events import EventManager, Subscription
 from aiogram_mcp.middleware import MCPMiddleware
 from aiogram_mcp.permissions import (
+    TOOL_PERMISSIONS,
     PermissionLevel,
     get_allowed_tools,
     parse_permission_level,
-    TOOL_PERMISSIONS,
 )
-from aiogram_mcp.audit import AuditEntry, AuditLogger
 from aiogram_mcp.rate_limiter import RateLimiter
 from aiogram_mcp.server import AiogramMCP
 
@@ -3068,3 +3069,106 @@ class TestBotContextPhase6:
         al = AuditLogger(max_size=100)
         ctx = BotContext(bot=mock_bot, dp=dp, audit_logger=al)
         assert ctx.audit_logger is al
+
+
+class TestAiogramMCPPhase6:
+    def test_default_params_backward_compatible(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp)
+        tools = get_tool_names(mcp.fastmcp)
+        # Default is admin — all tools registered
+        assert "send_message" in tools
+        assert "ban_user" in tools
+
+    def test_rate_limiter_created(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, rate_limit=10)
+        assert mcp._ctx.rate_limiter is not None
+
+    def test_rate_limiter_disabled(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, rate_limit=0)
+        assert mcp._ctx.rate_limiter is None
+
+    def test_audit_logger_created(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, enable_audit=True)
+        assert mcp._ctx.audit_logger is not None
+
+    def test_audit_logger_disabled_by_default(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp)
+        assert mcp._ctx.audit_logger is None
+
+    def test_permission_read_filters_tools(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, permission_level="read")
+        tools = get_tool_names(mcp.fastmcp)
+        assert "get_bot_info" in tools
+        assert "get_chat_info" in tools
+        assert "send_message" not in tools
+        assert "ban_user" not in tools
+
+    def test_permission_messaging_filters_tools(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, permission_level="messaging")
+        tools = get_tool_names(mcp.fastmcp)
+        assert "send_message" in tools
+        assert "send_document" in tools
+        assert "ban_user" not in tools
+
+    def test_permission_moderation_filters_tools(self, mock_bot):
+        dp = MagicMock()
+        mcp = AiogramMCP(bot=mock_bot, dp=dp, permission_level="moderation")
+        tools = get_tool_names(mcp.fastmcp)
+        assert "ban_user" in tools
+        assert "broadcast" not in tools
+
+    def test_permission_invalid_raises(self, mock_bot):
+        dp = MagicMock()
+        with pytest.raises(ValueError, match="Invalid permission level"):
+            AiogramMCP(bot=mock_bot, dp=dp, permission_level="superadmin")
+
+
+class TestResourceAuditLog:
+    async def test_audit_log_resource_registered(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp, enable_audit=True)
+        resources = await mcp_server.fastmcp.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "telegram://audit/log" in uris
+
+    async def test_audit_log_returns_entries(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp, enable_audit=True)
+        mcp_server._ctx.audit_logger.log("test_tool", {"arg": 1}, ok=True)
+        result = await mcp_server.fastmcp.read_resource("telegram://audit/log")
+        content = json.loads(result.contents[0].content)
+        assert len(content["entries"]) == 1
+        assert content["entries"][0]["tool"] == "test_tool"
+
+    async def test_audit_log_empty_when_disabled(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(bot=mock_bot, dp=dp)  # audit disabled
+        result = await mcp_server.fastmcp.read_resource("telegram://audit/log")
+        content = json.loads(result.contents[0].content)
+        assert content["entries"] == []
+
+
+class TestResourceConfigPhase6:
+    async def test_config_includes_new_fields(self, mock_bot):
+        dp = MagicMock()
+        mcp_server = AiogramMCP(
+            bot=mock_bot,
+            dp=dp,
+            permission_level="messaging",
+            rate_limit=15,
+            enable_audit=True,
+            audit_log_size=200,
+        )
+        result = await mcp_server.fastmcp.read_resource("telegram://config")
+        content = json.loads(result.contents[0].content)
+        assert content["permission_level"] == "messaging"
+        assert content["rate_limit"] == 15
+        assert content["audit_enabled"] is True
+        assert content["audit_log_size"] == 200

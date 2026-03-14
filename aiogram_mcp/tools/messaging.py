@@ -26,127 +26,139 @@ class ForwardMessageResult(ToolResponse):
     message_id: int | None = None
 
 
-def register_messaging_tools(mcp: FastMCP, ctx: BotContext) -> None:
-    @mcp.tool
-    async def send_message(
-        chat_id: int,
-        text: str,
-        parse_mode: str | None = "HTML",
-        disable_notification: bool = False,
-        reply_to_message_id: int | None = None,
-    ) -> SendMessageResult:
-        """Send a text message to a Telegram chat or user."""
-        if not ctx.is_chat_allowed(chat_id):
-            return SendMessageResult(
-                ok=False,
-                error=f"Chat {chat_id} is not in the allowed_chat_ids whitelist.",
-            )
+def register_messaging_tools(
+    mcp: FastMCP, ctx: BotContext, allowed_tools: set[str] | None = None
+) -> None:
+    if allowed_tools is None or "send_message" in allowed_tools:
 
-        try:
-            msg = await ctx.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                parse_mode=normalize_parse_mode(parse_mode),
-                disable_notification=disable_notification,
-                reply_parameters=(
-                    ReplyParameters(message_id=reply_to_message_id)
-                    if reply_to_message_id is not None
-                    else None
-                ),
-            )
-            return SendMessageResult(
-                ok=True,
-                message_id=msg.message_id,
-                chat_id=msg.chat.id,
-                date=msg.date.isoformat(),
-            )
-        except ValueError as exc:
-            return SendMessageResult(ok=False, error=str(exc))
-        except TelegramForbiddenError:
-            return SendMessageResult(
-                ok=False, error="Bot was blocked by the user or lacks permission."
-            )
-        except TelegramBadRequest as exc:
-            return SendMessageResult(ok=False, error=str(exc))
+        @mcp.tool
+        async def send_message(
+            chat_id: int,
+            text: str,
+            parse_mode: str | None = "HTML",
+            disable_notification: bool = False,
+            reply_to_message_id: int | None = None,
+        ) -> SendMessageResult:
+            """Send a text message to a Telegram chat or user."""
+            if not ctx.is_chat_allowed(chat_id):
+                return SendMessageResult(
+                    ok=False,
+                    error=f"Chat {chat_id} is not in the allowed_chat_ids whitelist.",
+                )
 
-    @mcp.tool
-    async def send_photo(
-        chat_id: int,
-        photo_url: str,
-        caption: str | None = None,
-        parse_mode: str | None = "HTML",
-        disable_notification: bool = False,
-    ) -> SendPhotoResult:
-        """Send a photo to a Telegram chat."""
-        if not ctx.is_chat_allowed(chat_id):
-            return SendPhotoResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+            try:
+                msg = await ctx.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=normalize_parse_mode(parse_mode),
+                    disable_notification=disable_notification,
+                    reply_parameters=(
+                        ReplyParameters(message_id=reply_to_message_id)
+                        if reply_to_message_id is not None
+                        else None
+                    ),
+                )
+                return SendMessageResult(
+                    ok=True,
+                    message_id=msg.message_id,
+                    chat_id=msg.chat.id,
+                    date=msg.date.isoformat(),
+                )
+            except ValueError as exc:
+                return SendMessageResult(ok=False, error=str(exc))
+            except TelegramForbiddenError:
+                return SendMessageResult(
+                    ok=False, error="Bot was blocked by the user or lacks permission."
+                )
+            except TelegramBadRequest as exc:
+                return SendMessageResult(ok=False, error=str(exc))
 
-        try:
-            msg = await ctx.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo_url,
-                caption=caption,
-                parse_mode=normalize_parse_mode(parse_mode),
-                disable_notification=disable_notification,
-            )
-            return SendPhotoResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
-        except ValueError as exc:
-            return SendPhotoResult(ok=False, error=str(exc))
-        except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return SendPhotoResult(ok=False, error=str(exc))
+    if allowed_tools is None or "send_photo" in allowed_tools:
 
-    @mcp.tool
-    async def forward_message(
-        to_chat_id: int,
-        from_chat_id: int,
-        message_id: int,
-        disable_notification: bool = False,
-    ) -> ForwardMessageResult:
-        """Forward an existing message from one chat to another."""
-        if not ctx.is_chat_allowed(to_chat_id):
-            return ForwardMessageResult(
-                ok=False, error=f"Chat {to_chat_id} is not allowed."
-            )
+        @mcp.tool
+        async def send_photo(
+            chat_id: int,
+            photo_url: str,
+            caption: str | None = None,
+            parse_mode: str | None = "HTML",
+            disable_notification: bool = False,
+        ) -> SendPhotoResult:
+            """Send a photo to a Telegram chat."""
+            if not ctx.is_chat_allowed(chat_id):
+                return SendPhotoResult(ok=False, error=f"Chat {chat_id} is not allowed.")
 
-        try:
-            msg = await ctx.bot.forward_message(
-                chat_id=to_chat_id,
-                from_chat_id=from_chat_id,
-                message_id=message_id,
-                disable_notification=disable_notification,
-            )
-            return ForwardMessageResult(ok=True, message_id=msg.message_id)
-        except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return ForwardMessageResult(ok=False, error=str(exc))
+            try:
+                msg = await ctx.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_url,
+                    caption=caption,
+                    parse_mode=normalize_parse_mode(parse_mode),
+                    disable_notification=disable_notification,
+                )
+                return SendPhotoResult(ok=True, message_id=msg.message_id, chat_id=msg.chat.id)
+            except ValueError as exc:
+                return SendPhotoResult(ok=False, error=str(exc))
+            except (TelegramBadRequest, TelegramForbiddenError) as exc:
+                return SendPhotoResult(ok=False, error=str(exc))
 
-    @mcp.tool
-    async def delete_message(chat_id: int, message_id: int) -> OkResult:
-        """Delete a message from a chat."""
-        if not ctx.is_chat_allowed(chat_id):
-            return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+    if allowed_tools is None or "forward_message" in allowed_tools:
 
-        try:
-            await ctx.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            return OkResult(ok=True)
-        except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return OkResult(ok=False, error=str(exc))
+        @mcp.tool
+        async def forward_message(
+            to_chat_id: int,
+            from_chat_id: int,
+            message_id: int,
+            disable_notification: bool = False,
+        ) -> ForwardMessageResult:
+            """Forward an existing message from one chat to another."""
+            if not ctx.is_chat_allowed(to_chat_id):
+                return ForwardMessageResult(
+                    ok=False, error=f"Chat {to_chat_id} is not allowed."
+                )
 
-    @mcp.tool
-    async def pin_message(
-        chat_id: int,
-        message_id: int,
-        disable_notification: bool = False,
-    ) -> OkResult:
-        """Pin a message in a chat."""
-        if not ctx.is_chat_allowed(chat_id):
-            return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+            try:
+                msg = await ctx.bot.forward_message(
+                    chat_id=to_chat_id,
+                    from_chat_id=from_chat_id,
+                    message_id=message_id,
+                    disable_notification=disable_notification,
+                )
+                return ForwardMessageResult(ok=True, message_id=msg.message_id)
+            except (TelegramBadRequest, TelegramForbiddenError) as exc:
+                return ForwardMessageResult(ok=False, error=str(exc))
 
-        try:
-            await ctx.bot.pin_chat_message(
-                chat_id=chat_id,
-                message_id=message_id,
-                disable_notification=disable_notification,
-            )
-            return OkResult(ok=True)
-        except (TelegramBadRequest, TelegramForbiddenError) as exc:
-            return OkResult(ok=False, error=str(exc))
+    if allowed_tools is None or "delete_message" in allowed_tools:
+
+        @mcp.tool
+        async def delete_message(chat_id: int, message_id: int) -> OkResult:
+            """Delete a message from a chat."""
+            if not ctx.is_chat_allowed(chat_id):
+                return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+
+            try:
+                await ctx.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                return OkResult(ok=True)
+            except (TelegramBadRequest, TelegramForbiddenError) as exc:
+                return OkResult(ok=False, error=str(exc))
+
+    if allowed_tools is None or "pin_message" in allowed_tools:
+
+        @mcp.tool
+        async def pin_message(
+            chat_id: int,
+            message_id: int,
+            disable_notification: bool = False,
+        ) -> OkResult:
+            """Pin a message in a chat."""
+            if not ctx.is_chat_allowed(chat_id):
+                return OkResult(ok=False, error=f"Chat {chat_id} is not allowed.")
+
+            try:
+                await ctx.bot.pin_chat_message(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    disable_notification=disable_notification,
+                )
+                return OkResult(ok=True)
+            except (TelegramBadRequest, TelegramForbiddenError) as exc:
+                return OkResult(ok=False, error=str(exc))
